@@ -6,10 +6,21 @@ import {
   inLaunchZone,
   patternPoints,
   deadzone,
+  gateReach,
+  manualLaunch,
+  shotRange,
+  controlOwnsKey,
   basePoints,
   overLaunchLine,
 } from './physics';
 export type Snapshot = {
+  elevation?: number;
+  power?: number;
+  assist?: boolean;
+  gateDistance?: number;
+  gatePrompt?: string;
+  shotRange?: number | null;
+  goalDistance?: number;
   intake?: boolean;
   flywheel?: number;
   phase?: string;
@@ -55,6 +66,7 @@ type Gate = {
   side: number;
 };
 type Options = {
+  elevation: number;
   assist: boolean;
   power: number;
   view: string;
@@ -85,6 +97,7 @@ export class Simulator {
   options: Options = {
     assist: true,
     power: 6.3,
+    elevation: 55,
     view: 'Field',
     sound: true,
     timed: false,
@@ -141,6 +154,8 @@ export class Simulator {
   resize: ResizeObserver;
   audio?: AudioContext;
   trajectory: THREE.Line;
+  gateMarker?: THREE.Mesh;
+  adjustmentClock = 0;
   contextLife = new AbortController();
   constructor(
     private el: HTMLElement,
@@ -193,6 +208,7 @@ export class Simulator {
       }),
     );
     this.scene.add(this.trajectory);
+    this.keydown = this.keydown.bind(this);
     this.resize = new ResizeObserver(() => this.resizeCanvas());
     this.resize.observe(el);
     this.resizeCanvas();
@@ -419,13 +435,13 @@ export class Simulator {
         side * 1.61,
         0.5,
         -0.39,
-        0.23,
+        0.148,
         0.022,
         1.47,
         '#a0afb0',
       );
       ramp.rotation.x = 0.43;
-      let rd = RAPIER.ColliderDesc.cuboid(0.115, 0.011, 0.735)
+      let rd = RAPIER.ColliderDesc.cuboid(0.074, 0.011, 0.735)
         .setTranslation(side * 1.61, 0.5, -0.39)
         .setRotation({
           x: Math.sin(0.43 / 2),
@@ -435,7 +451,7 @@ export class Simulator {
         })
         .setFriction(0.16);
       this.world.createCollider(rd);
-      for (let dx of [-0.125, 0.125]) {
+      for (let dx of [-0.083, 0.083]) {
         let rail = this.box(
           side * 1.61 + dx,
           0.58,
@@ -467,11 +483,11 @@ export class Simulator {
         ),
       );
       this.world.createCollider(
-        RAPIER.ColliderDesc.cuboid(0.14, 0.072, 0.015),
+        RAPIER.ColliderDesc.cuboid(0.14, 0.155, 0.015),
         body,
       );
       let gate = new THREE.Group();
-      this.box(0, 0, 0, 0.28, 0.144, 0.03, color, false, gate);
+      this.box(0, 0, 0, 0.28, 0.31, 0.03, color, false, gate);
       this.box(
         -side * 0.14,
         -0.07,
@@ -485,6 +501,21 @@ export class Simulator {
       );
       this.scene.add(gate);
       this.gates.push({ body, mesh: gate, angle: 0, velocity: 0, side });
+      if (side === -1) {
+        this.gateMarker = new THREE.Mesh(
+          new THREE.RingGeometry(0.23, 0.255, 48),
+          new THREE.MeshBasicMaterial({
+            color: '#87a8ef',
+            transparent: true,
+            opacity: 0.55,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          }),
+        );
+        this.gateMarker.rotation.x = -Math.PI / 2;
+        this.gateMarker.position.set(-1.25, 0.017, 0.4);
+        this.scene.add(this.gateMarker);
+      }
       this.line(
         new THREE.Vector3(side * 1.31, 0, 0.21),
         new THREE.Vector3(side * 1.31, 0, 0.49),
@@ -567,7 +598,8 @@ export class Simulator {
     this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(0.19, 0.11, 0.19)
         .setMass(14)
-        .setFriction(0.04),
+        .setFriction(0.04)
+        .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min),
       this.robot,
     );
     this.robot.setEnabledRotations(false, true, false, true);
@@ -810,18 +842,27 @@ export class Simulator {
   }
   configure(v: Partial<Options>) {
     this.options = { ...this.options, ...v };
+    this.options.power = Math.max(3, Math.min(11, this.options.power));
+    this.options.elevation = Math.max(
+      25,
+      Math.min(75, this.options.elevation || 55),
+    );
+    this.emit();
   }
   press(k: string, v: boolean) {
     if (v) this.keys.add(k);
     else this.keys.delete(k);
   }
-  keydown = (e: KeyboardEvent) => {
-    if (
-      (e.target as HTMLElement)?.closest(
-        'input,textarea,[role="switch"],[role="slider"]',
-      )
-    )
-      return;
+  keydown(e: KeyboardEvent) {
+    if (e.defaultPrevented) return;
+    const target = e.target as HTMLElement;
+    const editing = !!target?.closest(
+      'textarea, input:not([type="checkbox"]):not([type="range"]), [contenteditable="true"]',
+    );
+    const adjusting = !!target?.closest(
+      '[role="switch"],[role="slider"],input[type="checkbox"],input[type="range"]',
+    );
+    if (controlOwnsKey(e.code, editing, adjusting)) return;
     if (
       [
         'Space',
@@ -840,6 +881,14 @@ export class Simulator {
       if (e.code === 'Enter') this.toggle();
       if (e.code === 'KeyR') this.toggleIntake();
       if (e.code === 'KeyH') this.loadArtifact();
+      if (
+        e.code === 'KeyF' &&
+        this.options.timed &&
+        this.s.phase !== 'TELEOP'
+      ) {
+        this.s.message = 'Gate control unlocks in TELEOP.';
+        this.emit();
+      }
       if (e.code === 'KeyC')
         this.options.view =
           this.options.view === 'Field'
@@ -850,7 +899,7 @@ export class Simulator {
       if (e.code === 'Escape' && this.s.running) this.toggle();
     }
     this.keys.add(e.code);
-  };
+  }
   keyup = (e: KeyboardEvent) => this.keys.delete(e.code);
   blur = () => {
     this.keys.clear();
@@ -908,19 +957,14 @@ export class Simulator {
     let start = { x, y: p.y + 0.27, z };
     let velocity = this.options.assist
       ? launchVelocity(start, { x: -1.55, y: 1.055, z: -1.59 })
-      : {
-          x:
-            -Math.sin(yaw) * this.options.power * Math.cos(0.88) +
-            this.robot.linvel().x,
-          y: this.options.power * Math.sin(0.88),
-          z:
-            -Math.cos(yaw) * this.options.power * Math.cos(0.88) +
-            this.robot.linvel().z,
-        };
-    if (this.options.assist) {
-      velocity.x += this.robot.linvel().x;
-      velocity.z += this.robot.linvel().z;
-    }
+      : manualLaunch(
+          this.options.power,
+          this.options.elevation || 55,
+          yaw,
+          this.robot.linvel(),
+        );
+    // Assisted turret compensates platform motion through relative exit velocity.
+    // Ballistic world velocity remains unchanged; manual shots inherit chassis motion.
     return { start, velocity, yaw };
   }
   shoot(automatic = false) {
@@ -988,7 +1032,23 @@ export class Simulator {
     if (!this.s.running) return;
     this.shotClock = Math.max(0, this.shotClock - DT);
     this.reverseClock = Math.max(0, this.reverseClock - DT);
+    this.adjustmentClock = Math.max(0, (this.adjustmentClock || 0) - DT);
     const canDrive = !this.options.timed || this.s.phase === 'TELEOP';
+    if (canDrive && !this.options.assist && this.adjustmentClock === 0) {
+      const power =
+        Number(this.keys.has('Equal') || buttons[15]?.pressed) -
+        Number(this.keys.has('Minus') || buttons[14]?.pressed);
+      const angle =
+        Number(this.keys.has('BracketRight') || buttons[12]?.pressed) -
+        Number(this.keys.has('BracketLeft') || buttons[13]?.pressed);
+      if (power || angle) {
+        this.configure({
+          power: this.options.power + power * 0.2,
+          elevation: (this.options.elevation || 55) + angle * 2,
+        });
+        this.adjustmentClock = 0.12;
+      }
+    }
     this.flywheel +=
       ((this.inventory.length && (canDrive || this.s.phase === 'AUTO')
         ? 1
@@ -1017,6 +1077,13 @@ export class Simulator {
         z = -0.5;
       }
     }
+    if (canDrive && this.options.view === 'Follow') {
+      const c = Math.cos(this.yaw),
+        s = Math.sin(this.yaw);
+      const worldX = x * c + z * s;
+      z = -x * s + z * c;
+      x = worldX;
+    }
     let len = Math.hypot(x, z);
     if (len > 1) {
       x /= len;
@@ -1041,11 +1108,19 @@ export class Simulator {
     );
     if (p.y < 0.22)
       this.robot.applyImpulse({ x: impulse.x, y: 0, z: impulse.z }, true);
-    let angular = this.robot.angvel();
+    const angular = this.robot.angvel(),
+      targetTurn = turn * (precision ? 0.85 : 2.4),
+      inertia = (this.robot.mass() * 0.38 * 0.38) / 6;
     this.robot.applyTorqueImpulse(
       {
         x: 0,
-        y: Math.max(-0.1, Math.min(0.1, (turn * 2.6 - angular.y) * 0.025)),
+        y: Math.max(
+          -inertia * 8 * DT,
+          Math.min(
+            inertia * 8 * DT,
+            (targetTurn - angular.y) * inertia * (1 - Math.exp(-DT / 0.1)),
+          ),
+        ),
         z: 0,
       },
       true,
@@ -1062,8 +1137,20 @@ export class Simulator {
       (this.keys.has('Space') || buttons[7]?.pressed || buttons[0]?.pressed)
     )
       this.shoot();
-    this.s.nearGate =
-      Math.abs(p.x + 1.29) < 0.15 && Math.abs(p.z - 0.36) < 0.17;
+    this.s.gateDistance = gateReach(p.x, p.z, this.yaw);
+    this.s.nearGate = this.s.gateDistance <= 0.16;
+    const wantsGate = this.keys.has('KeyF') || buttons[2]?.pressed;
+    this.s.gatePrompt = !canDrive
+      ? 'Gate control unlocks in TELEOP'
+      : this.s.nearGate
+        ? wantsGate
+          ? 'Opening gate · keep holding F / Square'
+          : 'Hold F / Square to open blue gate'
+        : `Blue gate · ${Math.max(0, this.s.gateDistance - 0.16).toFixed(1)} m away`;
+    if (wantsGate && !this.s.nearGate) {
+      this.s.message =
+        'Approach the marked blue gate on the left. ' + this.s.gatePrompt;
+    }
     for (let g of this.gates) {
       let pushing =
         (canDrive &&
@@ -1078,11 +1165,11 @@ export class Simulator {
       if (g.angle === 0 || g.angle === 1.4) g.velocity = 0;
       g.body.setNextKinematicTranslation({
         x: g.side * 1.61,
-        y: 0.205 + Math.sin(g.angle) * 0.19,
-        z: 0.36,
+        y: 0.36 - Math.cos(g.angle) * 0.155,
+        z: 0.36 + Math.sin(g.angle) * 0.155,
       });
       g.body.setNextKinematicRotation({
-        x: Math.sin(g.angle / 2),
+        x: -Math.sin(g.angle / 2),
         y: 0,
         z: 0,
         w: Math.cos(g.angle / 2),
@@ -1146,7 +1233,12 @@ export class Simulator {
       }
       b.previousY = pos.y;
       if (b.state === 'flight' && pos.y < 0.1) b.state = 'free';
-      if (b.state === 'ramp' && pos.z > 0.48) {
+      // A released ball can settle on the floor immediately below the lip.
+      // Count physical departure from the deck, even without forward momentum.
+      if (
+        b.state === 'ramp' &&
+        (pos.z > 0.48 || (pos.z > 0.278 && pos.y < 0.13))
+      ) {
         b.state = 'free';
         this.ramp = this.ramp.filter((v) => v !== b);
         this.redRamp = this.redRamp.filter((v) => v !== b);
@@ -1192,6 +1284,11 @@ export class Simulator {
     this.robotMesh.position.set(p.x, p.y, p.z);
     this.robotMesh.quaternion.set(q.x, q.y, q.z, q.w);
     for (let w of this.wheels) w.rotation.x += (this.s.speed * elapsed) / 0.07;
+    if (this.gateMarker) {
+      const mat = this.gateMarker.material as THREE.MeshBasicMaterial;
+      mat.color.set(this.s.nearGate ? '#cafb63' : '#87a8ef');
+      mat.opacity = this.s.nearGate ? 0.85 : 0.5;
+    }
     let shot = this.getLaunch();
     this.turret.rotation.y = shot.yaw - this.yaw;
     if (this.intakeRoller)
@@ -1281,6 +1378,20 @@ export class Simulator {
   };
   emit() {
     this.s.flywheel = Math.round(this.flywheel * 100);
+    this.s.elevation = this.options.elevation || 55;
+    this.s.power = this.options.power;
+    this.s.assist = this.options.assist;
+    const launch = this.getLaunch();
+    this.s.goalDistance = Math.hypot(
+      -1.55 - launch.start.x,
+      -1.59 - launch.start.z,
+    );
+    const v = launch.velocity;
+    this.s.shotRange = shotRange(
+      Math.hypot(v.x, v.y, v.z),
+      (Math.atan2(v.y, Math.hypot(v.x, v.z)) * 180) / Math.PI,
+      launch.start.y,
+    );
     this.s.reserve = this.blueReserve.length;
     this.s.motif = this.motif;
     this.s.view = this.options.view;
@@ -1312,7 +1423,8 @@ export class Simulator {
       this.world.createCollider(
         RAPIER.ColliderDesc.cuboid(0.19, 0.11, 0.19)
           .setMass(14)
-          .setFriction(0.04),
+          .setFriction(0.04)
+          .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min),
         body,
       );
       body.setEnabledRotations(false, true, false, true);

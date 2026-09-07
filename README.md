@@ -6,7 +6,7 @@ Unofficial FIRST Tech Challenge 2025–26 DECODE driver and four-robot match pra
 
 | Action | Keyboard | Standard PS5 mapping |
 |---|---|---|
-| Field-relative drive | WASD / arrows | Left stick |
+| Drive (field-relative; robot-relative in Follow) | WASD / arrows | Left stick |
 | Rotate | Q / E | Right stick X |
 | Toggle front intake | R | L1 |
 | Reverse intake | B (hold) | Circle (hold) |
@@ -15,9 +15,11 @@ Unofficial FIRST Tech Challenge 2025–26 DECODE driver and four-robot match pra
 | Precision speed | Shift | L2 |
 | Change camera | C | Triangle |
 | Pause / start | Enter | Options |
+| Manual shot speed | − / + | D-pad left / right |
+| Manual shot elevation | [ / ] | D-pad down / up |
 | Human-player feed | H / Feed tray | On-screen button |
 
-Intake starts OFF and accepts at most three artifacts. The roller applies a bounded capture force in its front mouth, and reverse physically ejects an artifact. A shot waits for flywheel spin-up. Aim assist computes an initial ballistic velocity; chassis velocity still affects the shot. Stationary shooting is more accurate. The scoreboard is in the driver panel so neither goal is covered. Physical PS5 hardware has not been tested; synthetic standard Gamepad API input is covered by tests.
+Intake starts OFF and accepts at most three artifacts. The roller applies a bounded capture force in its front mouth, and reverse physically ejects an artifact. A shot waits for flywheel spin-up. Aim assist compensates for chassis velocity. Manual shots inherit chassis velocity and support 3–11 m/s launch speed and 25–75° elevation, with an estimated range at goal height. The blue gate approach marker and distance prompt show where to hold F; F also works after focusing a settings switch. The scoreboard is in the driver panel so neither goal is covered. Physical PS5 hardware has not been tested; synthetic standard Gamepad API input is covered by tests.
 
 ## Match practice
 
@@ -29,7 +31,7 @@ Blue goal/gate are on the audience's left; blue loading/base are on the right. O
 
 ## Physics and remaining approximations
 
-Three.js rendering with shadows, materials and modeled robot parts. Rapier rigid-body dynamics at a fixed 120 Hz, SI units, gravity 9.81 m/s², continuous collision detection, traction-capped motor forces, friction, rolling, restitution, and launcher recoil. Dynamic balls physically roll along inclined classifier ramps and are retained by gate colliders. Gate motion uses a damped gravity-linkage approximation requiring nearby actuation.
+Three.js rendering with shadows, materials and modeled robot parts. Rapier rigid-body dynamics at a fixed 120 Hz, SI units, gravity 9.81 m/s², continuous collision detection, traction-capped motor forces, friction, rolling, restitution, and launcher recoil. Dynamic balls physically roll along inclined classifier ramps with 148 mm clear lanes for 127 mm balls. A hinged gate swings forward and upward to release the queue; all nine balls are covered by the release test. Driving uses timestep-aware motor response, acceleration and braking limits. Gate motion uses a damped gravity-linkage approximation requiring nearby actuation.
 
 Goal-to-square routing remains scripted after a valid top-entry sensor. Geometry is a hand-modeled approximation, not official CAD. Motor force, mass, friction, restitution and damping have not been calibrated against hardware. Robot roll/pitch is constrained. Base/leave geometry is approximate. Depot points, ranking points, most interaction fouls, advanced autonomous programming, robot customization and network multiplayer are not implemented. The supplied YouTube video could not be loaded for frame-by-frame comparison; the authoritative field illustrations were inspected instead.
 
@@ -39,6 +41,6 @@ Official source: https://ftc-resources.firstinspires.org/ftc/archive/2026/game/c
 
 `npm install`, `npm run dev`, `npm test`, `npm run build`.
 
-Tests exercise the same field construction and physics stepping used in the game: counts and staging, spin-up and valid goal entry, gate release/gravity return, intake off/on and reverse, wall collisions, launch guards, motif/base scoring, four robots, full match phases including the 120-second teleop, post-buzzer settling, conservation of artifacts, and synthetic controller movement/toggle/pause.
+Tests exercise the same field construction and physics stepping used in the game: counts and staging, spin-up and valid goal entry, single-ball and full nine-ball gate release/gravity return, keyboard focus handling, manual shot range and inherited velocity, timestep consistency, intake off/on and reverse, wall collisions, launch guards, motif/base scoring, four robots, full match phases including the 120-second teleop, post-buzzer settling, conservation of artifacts, and synthetic controller movement/toggle/pause.
 
 TypeScript and production build are checked separately. Visual browser QA and real gamepad testing have not been performed. Optional WebMCP tools remain feature-detected; no supported WebMCP validation context was available.

@@ -42,6 +42,7 @@ export default function Home() {
   const [s, setS] = useState(initial),
     [assist, setAssist] = useState(true),
     [power, setPower] = useState(6.3),
+    [elevation, setElevation] = useState(55),
     [view, setView] = useState('Field'),
     [sound, setSound] = useState(true),
     [help, setHelp] = useState(false),
@@ -57,6 +58,9 @@ export default function Home() {
           if (!dead) {
             setS(v);
             if (v.view) setView(v.view);
+            if (v.power !== undefined) setPower(v.power);
+            if (v.elevation !== undefined) setElevation(v.elevation);
+            if (v.assist !== undefined) setAssist(v.assist);
           }
         });
         if (dead) engine.dispose();
@@ -174,6 +178,16 @@ export default function Home() {
             <span>DECODE</span>
             <small>12 × 12 FT FIELD</small>
           </div>
+          {s.running && (
+            <div
+              className={
+                'interaction-prompt ' + (s.nearGate ? 'available' : '')
+              }
+            >
+              <kbd>F</kbd>
+              <span>{s.gatePrompt || 'Blue gate is on the left'}</span>
+            </div>
+          )}
           <div className="arena-bottom">
             <div className="telemetry">
               <span className="status-dot" />
@@ -381,7 +395,7 @@ export default function Home() {
             <Slider
               aria-labelledby="power-label"
               min={3}
-              max={10}
+              max={11}
               step={0.1}
               value={[power]}
               disabled={assist}
@@ -391,6 +405,41 @@ export default function Home() {
                 sim.current?.configure({ power: n });
               }}
             />
+            <div className="power-label">
+              <label id="elevation-label">Shot elevation</label>
+              <span>{assist ? 'AUTO' : `${elevation}°`}</span>
+            </div>
+            <Slider
+              aria-labelledby="elevation-label"
+              min={25}
+              max={75}
+              step={1}
+              value={[elevation]}
+              disabled={assist}
+              onValueChange={(v) => {
+                const angle = Array.isArray(v) ? v[0] : v;
+                setElevation(angle);
+                sim.current?.configure({ elevation: angle });
+              }}
+            />
+            <div className="range-readout">
+              <span>
+                Goal <b>{(s.goalDistance || 0).toFixed(1)} m</b>
+              </span>
+              <span>
+                Estimated reach{' '}
+                <b>
+                  {s.shotRange == null
+                    ? 'Too low'
+                    : `${s.shotRange.toFixed(1)} m`}
+                </b>
+              </span>
+            </div>
+            <p className="hint">
+              {assist
+                ? 'Aim assist compensates movement. Shoot from a taped launch zone.'
+                : '− / + adjusts speed · [ / ] adjusts elevation. D-pad works too. Range estimate excludes collisions.'}
+            </p>
             <button
               className="shoot-button"
               disabled={
@@ -433,8 +482,25 @@ export default function Home() {
                 ◈ Gate {s.gate > 0.3 ? 'open' : 'closed'}
               </span>
               <button
-                disabled={!s.running || !s.nearGate}
-                onPointerDown={() => sim.current?.press('KeyF', true)}
+                disabled={!s.running || (timed && s.phase !== 'TELEOP')}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  sim.current?.press('KeyF', true);
+                }}
+                onPointerCancel={() => sim.current?.press('KeyF', false)}
+                onKeyDown={(e) => {
+                  if (e.code === 'Space' || e.code === 'Enter') {
+                    e.preventDefault();
+                    sim.current?.press('KeyF', true);
+                  }
+                }}
+                onKeyUp={(e) => {
+                  if (e.code === 'Space' || e.code === 'Enter') {
+                    e.preventDefault();
+                    sim.current?.press('KeyF', false);
+                  }
+                }}
+                onBlur={() => sim.current?.press('KeyF', false)}
                 onPointerUp={() => sim.current?.press('KeyF', false)}
                 onPointerLeave={() => sim.current?.press('KeyF', false)}
               >
@@ -442,8 +508,9 @@ export default function Home() {
               </button>
             </div>
             <p className="hint">
-              The blue gate is on the left. Hold F / Square beside the lever to
-              release artifacts into the red return lane.
+              {s.nearGate
+                ? 'In reach. Hold F / Square until the ramp is empty.'
+                : 'Approach the glowing blue circle on the left, then hold F / Square.'}
             </p>
           </section>
           <section className="session-stats">
@@ -541,7 +608,7 @@ export default function Home() {
           </p>
           <div className="control-guide">
             <span>Left stick</span>
-            <b>Move on the field</b>
+            <b>Move · forward in Follow view</b>
             <span>Right stick ↔</span>
             <b>Turn robot</b>
             <span>L1 / R</span>
@@ -556,18 +623,24 @@ export default function Home() {
             <b>Precision driving</b>
             <span>Triangle</span>
             <b>Change camera</b>
+            <span>D-pad ← / →</span>
+            <b>Manual launch speed</b>
+            <span>D-pad ↓ / ↑</span>
+            <b>Manual elevation</b>
             <span>Options / Enter</span>
             <b>Pause / resume</b>
           </div>
           <h3>Simulation notes</h3>
           <p>
-            Rapier rigid-body physics at 120 Hz; gravity, momentum, friction,
-            bouncing, and continuous collision detection. Robot traction and
-            gate linkage are approximated. Classifier routing is scripted after
-            goal entry. Match mode adds three practice bots, preset autonomous,
-            randomized motifs, and post-match settling. Bot strategy, field
-            geometry, and referee coverage remain approximations; this is not an
-            official match adjudicator.
+            WASD moves relative to the field in Field/Top view, and relative to
+            the robot in Follow view. Q/E turns; Shift slows movement and
+            turning. Rapier rigid-body physics at 120 Hz; gravity, momentum,
+            friction, bouncing, and continuous collision detection. Robot
+            traction and gate linkage are approximated. Classifier routing is
+            scripted after goal entry. Match mode adds three practice bots,
+            preset autonomous, randomized motifs, and post-match settling. Bot
+            strategy, field geometry, and referee coverage remain
+            approximations; this is not an official match adjudicator.
           </p>
           <a
             href="https://ftc-resources.firstinspires.org/ftc/archive/2026/game/cm-html/DECODE_Competition_Manual_TU32.htm"

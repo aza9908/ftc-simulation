@@ -144,6 +144,66 @@ step(1900);
 assert.equal(s.s.phase, 'COMPLETE');
 assert(s.s.ended);
 assert.equal(s.balls.length, 36, 'no artifacts are created or lost');
+// A full, single-file ramp must remain blocked until the physically nearby gate opens.
+s.options.timed = false;
+s.reset();
+s.s.running = true;
+const rackBalls = s.balls.filter((b) => b.state === 'free').slice(0, 9);
+for (const ball of rackBalls) {
+  ball.state = 'ramp';
+  s.ramp.push(ball);
+  ball.body.setTranslation({ x: -1.61, y: 0.87, z: -1.03 }, true);
+  ball.body.setLinvel({ x: 0, y: 0, z: 0.18 }, true);
+  step(130);
+}
+step(300);
+assert.equal(s.ramp.length, 9, 'closed narrow ramp retains nine balls');
+assert(
+  rackBalls.every((b) => Math.abs(b.body.translation().x + 1.61) < 0.04),
+  'balls remain in the single-file lane',
+);
+s.robot.setTranslation({ x: -1.22, y: 0.14, z: 0.4 }, true);
+s.robot.setLinvel({ x: 0, y: 0, z: 0 }, true);
+const switchTarget = {
+  closest(selector) {
+    return selector.includes('[role="switch"]') ? {} : null;
+  },
+};
+s.keydown({
+  code: 'KeyF',
+  target: switchTarget,
+  repeat: false,
+  defaultPrevented: false,
+  preventDefault() {},
+});
+assert(s.keys.has('KeyF'), 'F must work with a settings switch focused');
+step(1000);
+assert(s.s.gate > 0.8);
+assert.equal(s.ramp.length, 0, 'held F drains all nine balls');
+s.keys.clear();
+step(250);
+assert(s.s.gate < 0.1);
+assert(P.gateReach(-1.22, 0.4, 0) < 0.16);
+assert(P.gateReach(0, 0.4, 0) > 0.16);
+assert(P.controlOwnsKey('Space', false, true));
+assert(!P.controlOwnsKey('KeyF', false, true));
+assert(P.controlOwnsKey('KeyF', true, false));
+assert(P.shotRange(8, 45) > P.shotRange(5, 45));
+assert.equal(P.shotRange(3, 25), null);
+const movingShot = P.manualLaunch(6, 55, 0, { x: 1, z: 0.5 }),
+  stillShot = P.manualLaunch(6, 55, 0, { x: 0, z: 0 });
+assert.equal(movingShot.x - stillShot.x, 1);
+assert.equal(movingShot.z - stillShot.z, 0.5);
+// Servo impulse should converge across different simulation step sizes.
+function response(dt) {
+  let v = { x: 0, z: 0 };
+  for (let t = 0; t < 1 - 1e-8; t += dt) {
+    let imp = P.driveImpulse(v, { x: 1.65, z: 0 }, 14, dt);
+    v.x += imp.x / 14;
+  }
+  return v.x;
+}
+assert(Math.abs(response(1 / 60) - response(1 / 120)) < 0.025);
 // Standard gamepad mapping uses L1 as an edge-triggered intake toggle.
 s.options.timed = false;
 s.reset();
