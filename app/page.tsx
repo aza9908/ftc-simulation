@@ -48,16 +48,22 @@ export default function Home() {
     [timed, setTimed] = useState(false);
   useEffect(() => {
     let dead = false;
+    let owned: Simulator | null = null;
+    const host = mount.current;
     import('./simulator')
       .then(async ({ Simulator }) => {
-        const engine = await Simulator.create(mount.current!, (v) => {
+        if (dead || !host) return;
+        const engine = await Simulator.create(host, (v) => {
           if (!dead) {
             setS(v);
             if (v.view) setView(v.view);
           }
         });
         if (dead) engine.dispose();
-        else sim.current = engine;
+        else {
+          owned = engine;
+          sim.current = engine;
+        }
       })
       .catch((e) =>
         setS((v) => ({
@@ -67,7 +73,8 @@ export default function Home() {
       );
     return () => {
       dead = true;
-      sim.current?.dispose();
+      owned?.dispose();
+      if (sim.current === owned) sim.current = null;
     };
   }, []);
   const start = () => sim.current?.toggle();

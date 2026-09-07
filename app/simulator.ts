@@ -64,9 +64,10 @@ type Options = {
 const H = 1.8288,
   R = 0.0635,
   DT = 1 / 120;
+let rapierReady: Promise<void> | undefined;
 export class Simulator {
   static async create(el: HTMLElement, cb: (s: Snapshot) => void) {
-    await RAPIER.init();
+    await (rapierReady ??= RAPIER.init());
     return new Simulator(el, cb);
   }
   scene = new THREE.Scene();
@@ -1731,6 +1732,7 @@ export class Simulator {
     }
   }
   dispose() {
+    if (this.disposed) return;
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();

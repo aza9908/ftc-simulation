@@ -172,6 +172,27 @@ assert(!s.s.intake);
 pad.buttons[9].pressed = true;
 step(1);
 assert(!s.s.running);
+let frees = 0;
+const disposable = Object.create(Simulator.prototype);
+Object.assign(disposable, {
+  disposed: false,
+  frame: 0,
+  resize: { disconnect() {} },
+  contextLife: new AbortController(),
+  world: {
+    free() {
+      frees++;
+    },
+  },
+  scene: new THREE.Scene(),
+  renderer: { dispose() {}, domElement: { remove() {} } },
+});
+globalThis.cancelAnimationFrame = () => {};
+globalThis.window = { removeEventListener() {} };
+globalThis.document = { removeEventListener() {} };
+disposable.dispose();
+disposable.dispose();
+assert.equal(frees, 1, 'dispose must be idempotent');
 s.world.free();
 console.log(
   'PASS: staging, spin-up, goal scoring, gate/recycling, manual intake/reverse, collisions, motifs, base scoring, four robots, match phases, settling, conservation and controller mapping.',
