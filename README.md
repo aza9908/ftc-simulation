@@ -1,26 +1,44 @@
-# DECODE driver simulator
+# DECODE simulator
 
-Unofficial solo driver practice inspired by the FIRST Tech Challenge 2025–26 DECODE competition manual TU32. This is a playable prototype, not a full competition or engineering validation simulator.
+Unofficial FIRST Tech Challenge 2025–26 DECODE driver and four-robot match practice, based on the official TU32 manual and field illustrations. No claim of complete referee coverage or calibrated engineering accuracy.
 
-## Play
+## Controls
 
-- WASD / arrows: field-relative translation. Q/E: rotate robot.
-- Space: shoot. Automatic aiming is enabled initially; disable it for manual heading and speed.
-- F (hold): push the blue gate while near its blue marked actuation zone.
-- Shift: precision speed. Enter: start/pause. C: camera.
-- Automatic front intake, maximum 3 artifacts.
-- PS5 DualSense: connect with USB/Bluetooth, press a button to expose it to the browser. Standard Gamepad API mapping: left stick move, right stick X turn, R2/Cross shoot, Square hold gate, L2 precision, Triangle camera, Options pause.
+| Action | Keyboard | Standard PS5 mapping |
+|---|---|---|
+| Field-relative drive | WASD / arrows | Left stick |
+| Rotate | Q / E | Right stick X |
+| Toggle front intake | R | L1 |
+| Reverse intake | B (hold) | Circle (hold) |
+| Shoot | Space | R2 / Cross |
+| Push blue gate, on left | F (hold near lever) | Square (hold) |
+| Precision speed | Shift | L2 |
+| Change camera | C | Triangle |
+| Pause / start | Enter | Options |
+| Human-player feed | H / Feed tray | On-screen button |
 
-## Implementation
+Intake starts OFF and accepts at most three artifacts. The roller applies a bounded capture force in its front mouth, and reverse physically ejects an artifact. A shot waits for flywheel spin-up. Aim assist computes an initial ballistic velocity; chassis velocity still affects the shot. Stationary shooting is more accurate. The scoreboard is in the driver panel so neither goal is covered. Physical PS5 hardware has not been tested; synthetic standard Gamepad API input is covered by tests.
 
-Three.js renders the 3D field with dynamic shadows, tone mapping, metal materials, modeled robot parts and balls. Rapier 3D simulates rigid-body contacts at a fixed 120 Hz, with SI units, gravity 9.81 m/s², continuous collision detection, traction-capped motor impulses, restitution and friction. Gate angle uses a damped, gravity-driven linkage approximation driving its physical collider. Ball flight is simulated, not animated; aim assist computes its initial ballistic velocity.
+## Match practice
 
-The field model has a 3.6576 m square interior, 0.127 m balls, 36 artifacts in the 24-purple/12-green ratio, two goals, and inclined physical classifier ramps. Goal-to-square routing is scripted after an entry sensor, after which classified balls physically roll down the ramp, are retained by the gate, and can roll out and be collected again. Exact CAD, measured material properties, flexible-body deformation, motor electrical models, and real DualSense hardware validation are not included.
+Enable **Four-robot match practice** to add a blue partner and two red practice bots. All four robots have rigid-body colliders and motor forces. Match timing is 30 seconds of preset autonomous, 8 seconds of transition, and 120 seconds of teleop. Driver motion/intake/shooting are locked during autonomous and transition. The bots use basic collect, shoot, clear-gate, and return-to-base routines, not recorded match strategies.
 
-Free drive and 120-second solo teleop practice are available. Classified/overflow values are 3/1, motif GPP positions score 2 at timed-session end. Base scoring uses a simplified bounding-area test. No opponents, autonomous programming, depot tally, full referee rules, ranking points, or official field placement certification. Timer freezes the session at zero; post-match settling is not simulated. Manual dimensions and rules reference: https://ftc-resources.firstinspires.org/ftc/archive/2026/game/cm-html/DECODE_Competition_Manual_TU32.htm (sections 9–11).
+Motif is randomized among GPP, PGP and PPG. Initial staging is 18 artifacts on spike marks (near GPP / middle PGP / far PPG, center out), 3 per loading zone, and 6 per alliance tray; robot preloads come from those trays. Match mode preloads all four robots with three, conserving 36 artifacts (24 purple, 12 green). Free drive retains the other artifacts in human-player trays. Out-of-field artifacts return to a tray; they are not recreated. Human-player feed requires the blue loading zone to be clear.
 
-## Run and validate
+Blue goal/gate are on the audience's left; blue loading/base are on the right. Opening the blue gate returns artifacts into the red side's lane. Classified/overflow scores are 3/1. Pattern positions score 2 after autonomous and at the end of teleop; leave and approximate base scoring are included. Physics continues after the buzzer until settling, with a 15-second cap.
 
-`npm install`, `npm run dev`, `npm run build`, `npm test`.
+## Physics and remaining approximations
 
-Headless physics checks use the same simulator field construction and step functions: artifact inventory, assisted shot scoring, physical gate release and gravity return, field wall collision, legal launch-zone guard, pattern scoring, bounded traction, timer, and synthetic standard-gamepad movement/pause. Physical PS5 controller and visual browser QA have not been performed. Optional WebMCP tools are feature-detected; no supported WebMCP validation context was available.
+Three.js rendering with shadows, materials and modeled robot parts. Rapier rigid-body dynamics at a fixed 120 Hz, SI units, gravity 9.81 m/s², continuous collision detection, traction-capped motor forces, friction, rolling, restitution, and launcher recoil. Dynamic balls physically roll along inclined classifier ramps and are retained by gate colliders. Gate motion uses a damped gravity-linkage approximation requiring nearby actuation.
+
+Goal-to-square routing remains scripted after a valid top-entry sensor. Geometry is a hand-modeled approximation, not official CAD. Motor force, mass, friction, restitution and damping have not been calibrated against hardware. Robot roll/pitch is constrained. Base/leave geometry is approximate. Depot points, ranking points, most interaction fouls, advanced autonomous programming, robot customization and network multiplayer are not implemented. The supplied YouTube video could not be loaded for frame-by-frame comparison; the authoritative field illustrations were inspected instead.
+
+Official source: https://ftc-resources.firstinspires.org/ftc/archive/2026/game/cm-html/DECODE_Competition_Manual_TU32.htm (sections 9–11).
+
+## Run and checks
+
+`npm install`, `npm run dev`, `npm test`, `npm run build`.
+
+Tests exercise the same field construction and physics stepping used in the game: counts and staging, spin-up and valid goal entry, gate release/gravity return, intake off/on and reverse, wall collisions, launch guards, motif/base scoring, four robots, full match phases including the 120-second teleop, post-buzzer settling, conservation of artifacts, and synthetic controller movement/toggle/pause.
+
+TypeScript and production build are checked separately. Visual browser QA and real gamepad testing have not been performed. Optional WebMCP tools remain feature-detected; no supported WebMCP validation context was available.
