@@ -46,7 +46,7 @@ export function TurretControls({
   return (
     <div className="turret-controls">
       <div className="turret-heading">
-        <b>Turret</b>
+        <b>Turn turret</b>
         <span>
           {Math.abs(angle) < 0.5
             ? 'Centered'
@@ -62,7 +62,7 @@ export function TurretControls({
           aria-label={`Player ${player + 1} turret left`}
           {...hold(left)}
         >
-          ↶ Left <kbd>{player === 0 ? 'Z' : 'K'}</kbd>
+          ◀ Left <kbd>{player === 0 ? 'Z' : 'K'}</kbd>
         </button>
         <button disabled={disabled} onClick={center}>
           Center
@@ -72,7 +72,7 @@ export function TurretControls({
           aria-label={`Player ${player + 1} turret right`}
           {...hold(right)}
         >
-          Right ↷ <kbd>{player === 0 ? 'X' : 'L'}</kbd>
+          Right ▶ <kbd>{player === 0 ? 'X' : 'L'}</kbd>
         </button>
       </div>
       <div className="turret-mode">
@@ -82,8 +82,7 @@ export function TurretControls({
         </button>
       </div>
       <p className="hint">
-        Hold to turn · ±170° stops. Controller: hold R1 + right stick; R3
-        centers. Turning takes over aiming for this player.
+        Hold left/right · R1 + right stick on PS5. R3 centers.
       </p>
     </div>
   );

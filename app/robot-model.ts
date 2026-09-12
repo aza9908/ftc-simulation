@@ -6,6 +6,7 @@ export type RobotModel = {
   turret?: THREE.Group;
   name: string;
   triangles: number;
+  launcherHeight: number;
 };
 
 // Inspect the container before the loader can resolve resources. Imports are
@@ -137,7 +138,13 @@ export function prepareRobotModel(
     // A separate Y-axis pivot preserves Blender's export transforms and origin.
     turret.attach(turretNode);
   }
-  return { root, turret, name, triangles: Math.round(triangles) };
+  return {
+    root,
+    turret,
+    name,
+    triangles: Math.round(triangles),
+    launcherHeight: Math.max(0.24, -0.125 + size.y * scale + 0.025),
+  };
 }
 
 export async function readRobotModel(file: File) {

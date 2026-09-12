@@ -1807,3 +1807,362 @@ kbd {
 .model-import-body .hint {
   max-width: 84ch;
 }
+
+/* Keep aiming at the top of the driver station, in view beside the field. */
+.workspace {
+  grid-template-columns: minmax(0, 1fr) 360px;
+  min-height: 760px;
+  height: auto;
+}
+.driver-panel {
+  max-height: none;
+  overflow: visible;
+}
+.field-column .arena {
+  min-height: 470px;
+}
+.aim-dock {
+  margin: -5px -4px 20px;
+  padding: 14px;
+  background: #141f2a;
+  border: 1px solid #7fa672;
+  border-radius: 9px;
+}
+.aim-dock-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.aim-dock-title h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #eaffd6;
+}
+.aim-robot-name {
+  font-size: 14px;
+  margin: 7px 0 12px;
+  color: #bbcedf;
+}
+.aim-player-tabs {
+  display: flex;
+  gap: 5px;
+}
+.aim-player-tabs button {
+  padding: 7px 11px;
+  background: #263747;
+  border: 1px solid #53697d;
+  color: white;
+  border-radius: 5px;
+}
+.aim-player-tabs button[aria-pressed='true'] {
+  background: #4d723a;
+  border-color: #b6ea87;
+}
+.aim-dock .turret-controls {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.aim-dock .turret-bearing {
+  display: none;
+}
+.aim-dock .turret-heading {
+  font-size: 15px;
+}
+.aim-dock .turret-buttons {
+  grid-template-columns: 1fr 0.75fr 1fr;
+  gap: 6px;
+}
+.aim-dock .turret-buttons button {
+  min-height: 48px;
+  padding: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  background: #bde887;
+  border-color: #d8ffad;
+  color: #13210a;
+}
+.aim-dock .turret-buttons button:active {
+  background: #efffdc;
+}
+.aim-dock .turret-buttons button:nth-child(2) {
+  background: #304251;
+  border-color: #526678;
+  color: #fff;
+}
+.aim-dock .turret-buttons kbd {
+  color: #142b09;
+  background: #d5f5b2;
+}
+.aim-dock .turret-mode {
+  margin-top: 8px;
+}
+.aim-dock .turret-controls .hint {
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.shooting-controls {
+  padding-top: 12px;
+  border-top: 1px solid #3b5162;
+  font-variant-numeric: tabular-nums;
+}
+.shot-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+}
+.shot-heading span {
+  font-size: 12px;
+  color: #bce887;
+}
+.shot-adjustment {
+  margin: 13px 0;
+}
+.shot-adjustment label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 15px;
+  color: #e4eef6;
+}
+.shot-adjustment strong {
+  font-size: 21px;
+  color: white;
+}
+.shot-adjustment small {
+  font-size: 12px;
+  font-weight: 400;
+}
+.shot-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+}
+.shot-slider-row button {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid #75889b;
+  color: white;
+  background: #314658;
+  font-size: 24px;
+}
+.shot-slider-row input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  accent-color: #bde887;
+  cursor: pointer;
+}
+.shot-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.shot-actions button {
+  min-height: 42px;
+  border: 1px solid #5d768c;
+  background: #2d4153;
+  color: white;
+  border-radius: 6px;
+  padding: 7px;
+  font-size: 13px;
+}
+.shot-actions .shot-fire {
+  background: #bde887;
+  color: #152508;
+  border-color: #c8f896;
+  font-size: 15px;
+  font-weight: 700;
+}
+.shot-actions button:disabled {
+  opacity: 0.45;
+}
+.shot-feedback {
+  min-height: 18px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #d1e3f2;
+}
+.aim-note {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #a8b9c7;
+  margin: 8px 0 0;
+}
+@media (max-width: 1050px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+@media (max-width: 760px) {
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .driver-panel {
+    display: contents;
+  }
+  .driver-panel > .aim-dock {
+    order: -1;
+    margin: 8px;
+  }
+  .driver-panel > :not(.aim-dock) {
+    margin-left: 14px;
+    margin-right: 14px;
+  }
+  .aim-dock .shooting-controls {
+    padding-top: 8px;
+  }
+  .aim-dock .turret-controls .hint,
+  .aim-note {
+    display: none;
+  }
+  .aim-dock .shot-adjustment {
+    margin: 8px 0;
+  }
+}
+
+@media (min-width: 761px) {
+  .field-column {
+    align-self: start;
+    position: sticky;
+    top: 12px;
+  }
+  .field-column .arena {
+    flex: none;
+    height: clamp(430px, 64vh, 720px);
+    min-height: 430px;
+  }
+}
+
+.library-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.library-select label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 650;
+}
+.library-select select {
+  background: #20313a;
+  color: #f3f7f4;
+  border: 1px solid #50616a;
+  border-radius: 6px;
+  padding: 8px;
+}
+.library-select > output {
+  font-size: 12px;
+  color: #c6e99a;
+}
+.robot-library-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.robot-library-grid article {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  border: 1px solid #42535b;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #1b2931;
+}
+.robot-library-grid article.selected {
+  border-color: #bfed74;
+}
+.robot-library-grid img {
+  width: 110px;
+  height: 100%;
+  object-fit: contain;
+  background: #303540;
+}
+.library-card-content {
+  padding: 12px;
+}
+.library-card-content h3 {
+  font-size: 17px;
+  margin: 0 0 6px;
+}
+.library-card-content p {
+  font-size: 12px;
+  margin: 0 0 5px;
+  color: #c3cccf;
+}
+.library-card-content small {
+  display: block;
+  font-size: 11px;
+  color: #b0bfc4;
+  line-height: 1.5;
+}
+.library-card-content button {
+  width: 100%;
+  margin: 12px 0 8px;
+  border: 1px solid #96b96d;
+  padding: 9px 6px;
+  background: #35442f;
+  color: #e8f9d5;
+  border-radius: 5px;
+}
+.library-card-content a,
+.model-credit a {
+  color: #bee18e;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.model-credit {
+  font-size: 11px;
+  color: #abb9bf;
+  line-height: 1.6;
+}
+.custom-model-import {
+  border-top: 1px solid #46555c;
+  padding-top: 12px;
+}
+.custom-model-import summary {
+  padding: 6px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+@media (max-width: 1050px) {
+  .robot-library-grid article {
+    display: flex;
+    flex-direction: column;
+  }
+  .robot-library-grid img {
+    width: 100%;
+    height: 110px;
+  }
+}
+@media (max-width: 500px) {
+  .library-select {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .robot-library summary > span {
+    font-size: 10px;
+  }
+  .robot-library-grid {
+    gap: 8px;
+  }
+  .library-card-content {
+    padding: 8px;
+  }
+  .library-card-content h3 {
+    font-size: 15px;
+  }
+}
+
+.shot-feedback {
+  display: block;
+}

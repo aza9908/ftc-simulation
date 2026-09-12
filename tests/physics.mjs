@@ -4,11 +4,19 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 fs.mkdirSync('work', { recursive: true });
-for (const name of ['physics', 'robot-model', 'simulator']) {
+for (const name of [
+  'physics',
+  'field-tags',
+  'robot-library',
+  'robot-model',
+  'simulator',
+]) {
   let src = fs
     .readFileSync(`app/${name}.ts`, 'utf8')
     .replace("'./physics'", "'./physics.mjs'")
-    .replace("'./robot-model'", "'./robot-model.mjs'");
+    .replace("'./robot-model'", "'./robot-model.mjs'")
+    .replace("'./robot-library'", "'./robot-library.mjs'")
+    .replace("'./field-tags'", "'./field-tags.mjs'");
   fs.writeFileSync(
     `work/${name}.mjs`,
     ts.transpileModule(src, {
@@ -31,6 +39,8 @@ Object.assign(s, {
   wheels: [],
   robotModels: new Map(),
   modelRequests: new Map(),
+  modelStatus: [],
+  modelFiles: new Map(),
   balls: [],
   gates: [],
   inventory: [],
@@ -437,6 +447,18 @@ step(120);
 assert.equal(s.s.shots, 1, 'pending shot fires once after alignment');
 s.reset();
 s.s.running = true;
+s.shootPlayer(1);
+assert(s.secondFireRequested, 'P2 on-screen shot queues during spin-up');
+step(300);
+assert.equal(
+  s.bots[1].inventory.length,
+  2,
+  'P2 queued shot fires exactly once',
+);
+step(120);
+assert.equal(s.bots[1].inventory.length, 2, 'P2 queued shot does not repeat');
+s.reset();
+s.s.running = true;
 s.keys.add('KeyZ');
 step(60);
 assert(!s.turretAssisted(0));
@@ -690,8 +712,7 @@ assert(
   'translation and rotation share motor capacity',
 );
 const rotationRobot = s.robot;
-s.options.assist = false;
-s.options.elevation = 55;
+s.configure({ assist: false, power: 6.3, elevation: 55 });
 rotationRobot.setLinvel({ x: 0, y: 0, z: 0 }, true);
 rotationRobot.setAngvel({ x: 0, y: 0, z: 0 }, true);
 const stillMuzzle = s.getLaunch().velocity;
@@ -706,6 +727,69 @@ assert(
   ) < 0.0001,
   'rotating muzzle adds tangential velocity',
 );
+// Aim sliders remain independent of turret tracking and of the other player.
+s.options.players = 2;
+s.configure({ assist: true });
+s.shotSettings[1] = { power: 7, elevation: 50, automatic: false };
+const otherShot = { ...s.shotSettings[1] };
+s.adjustShot(0, { power: 8, elevation: 42 });
+assert(
+  s.turretAssisted(0),
+  'changing power or angle must not switch off goal tracking',
+);
+assert.equal(s.getLaunch(0).power, 8);
+assert.equal(s.getLaunch(0).elevation, 42);
+assert.deepEqual(s.shotSettings[1], otherShot, 'P1 sliders must not change P2');
+s.adjustShot(1, { power: 9, elevation: 62 });
+assert.equal(s.getLaunch(0).power, 8);
+assert.equal(s.getLaunch(1).power, 9);
+assert.equal(s.getLaunch(1).elevation, 62);
+s.adjustmentClock = 0;
+s.secondAdjustmentClock = 0;
+s.s.running = true;
+pad1.connected = true;
+pad2.connected = true;
+pad1.axes = [0, 0, 0, 0];
+pad2.axes = [0, 0, 0, 0];
+for (const p of [pad1, pad2]) for (const b of p.buttons) b.pressed = false;
+pad1.buttons[15].pressed = true;
+pad2.buttons[12].pressed = true;
+Object.defineProperty(navigator, 'getGamepads', {
+  value: () => [pad1, pad2],
+  configurable: true,
+});
+step(1);
+assert(Math.abs(s.shotSettings[0].power - 8.2) < 1e-8);
+assert.equal(
+  s.shotSettings[1].elevation,
+  64,
+  'both controllers can adjust simultaneously',
+);
+Object.defineProperty(navigator, 'getGamepads', {
+  value: () => [],
+  configurable: true,
+});
+
+s.matchShotRange(0);
+assert(s.shotSettings[0].automatic);
+assert.equal(s.shotSettings[1].automatic, false);
+// Both decorative goal markers are mounted on the front wall, facing the field.
+s.scene.updateMatrixWorld(true);
+for (const side of [-1, 1]) {
+  const front = s.scene.getObjectByName(`goal-front-${side}`);
+  const marker = s.scene.getObjectByName(`goal-marker-${side}`);
+  assert.equal(marker.parent, front);
+  assert.equal(marker.userData.tagId, side === -1 ? 20 : 24);
+  assert(Math.abs(Math.abs(marker.position.x) - 0.0135) < 1e-8);
+  const normal = new THREE.Vector3(0, 0, 1).transformDirection(
+    marker.matrixWorld,
+  );
+  const expected = new THREE.Vector3(-side, 0, 1).normalize();
+  assert(
+    normal.dot(expected) > 0.999999,
+    'marker face follows diagonal front wall',
+  );
+}
 let frees = 0;
 const disposable = Object.create(Simulator.prototype);
 Object.assign(disposable, {

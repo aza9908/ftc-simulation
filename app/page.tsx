@@ -5,7 +5,6 @@ import {
   RotateCcw,
   Pause,
   Play,
-  Crosshair,
   Maximize,
   Keyboard,
   ChevronRight,
@@ -13,11 +12,10 @@ import {
   VolumeX,
   ArrowUpRight,
 } from 'lucide-react';
-import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import type { Simulator, Snapshot } from './simulator';
 import { MatchScoreboard, MatchResults } from './match-scoreboard';
 import { TurretControls } from './turret-controls';
+import { ShootingControls } from './shooting-controls';
 import { ModelImporter } from './model-importer';
 const initial: Snapshot = {
   ready: false,
@@ -44,12 +42,10 @@ export default function Home() {
   const mount = useRef<HTMLDivElement>(null),
     sim = useRef<Simulator | null>(null);
   const [s, setS] = useState(initial),
-    [assist, setAssist] = useState(true),
-    [power, setPower] = useState(6.3),
-    [elevation, setElevation] = useState(55),
     [view, setView] = useState('Field'),
     [sound, setSound] = useState(true),
     [help, setHelp] = useState(false),
+    [aimPlayer, setAimPlayer] = useState<0 | 1>(0),
     [timed, setTimed] = useState(true),
     [players, setPlayers] = useState<1 | 2>(1),
     [robot1, setRobot1] = useState(0),
@@ -67,9 +63,6 @@ export default function Home() {
             if (v.robot1 !== undefined) setRobot1(v.robot1);
             if (v.robot2 !== undefined) setRobot2(v.robot2);
             if (v.view) setView(v.view);
-            if (v.power !== undefined) setPower(v.power);
-            if (v.elevation !== undefined) setElevation(v.elevation);
-            if (v.assist !== undefined) setAssist(v.assist);
           }
         });
         if (dead) engine.dispose();
@@ -143,6 +136,7 @@ export default function Home() {
                   <input
                     type="radio"
                     name="players"
+                    disabled={!s.ready}
                     checked={players === count}
                     onChange={() => {
                       setPlayers(count);
@@ -165,6 +159,7 @@ export default function Home() {
                   <input
                     type="radio"
                     name="session"
+                    disabled={!s.ready}
                     checked={timed === match}
                     onChange={() => {
                       setTimed(match);
@@ -191,7 +186,7 @@ export default function Home() {
                       key={id}
                       type="button"
                       aria-pressed={(player === 1 ? robot1 : robot2) === id}
-                      disabled={player === 2 && id === robot1}
+                      disabled={!s.ready || (player === 2 && id === robot1)}
                       className={
                         (id < 2 ? 'blue-choice' : 'red-choice') +
                         ((player === 1 ? robot1 : robot2) === id
@@ -212,7 +207,11 @@ export default function Home() {
               parked.
             </p>
           </div>
-          <ModelImporter getSimulator={() => sim.current} ready={s.ready} />
+          <ModelImporter
+            getSimulator={() => sim.current}
+            ready={s.ready}
+            models={s.models}
+          />
           <section className="arena">
             <div
               ref={mount}
@@ -397,6 +396,83 @@ export default function Home() {
           <MatchScoreboard s={s} timed={timed} />
         </div>
         <aside className="driver-panel">
+          <section
+            className="aim-dock"
+            aria-label="Turret and shooting controls"
+          >
+            <div className="aim-dock-title">
+              <h2>Aim & shoot</h2>
+              {players === 2 && (
+                <div className="aim-player-tabs">
+                  {([0, 1] as const).map((p) => (
+                    <button
+                      key={p}
+                      aria-pressed={aimPlayer === p}
+                      onClick={() => {
+                        setAimPlayer(p);
+                        sim.current?.previewShot(p);
+                      }}
+                    >
+                      P{p + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {(() => {
+              const player = players === 2 ? aimPlayer : 0;
+              const state = player === 0 ? s : s.player2;
+              const shot = state?.shot || {
+                power: 6.3,
+                elevation: 55,
+                automatic: true,
+                status: 'Preparing robot…',
+              };
+              return (
+                <>
+                  <p className="aim-robot-name">
+                    Player {player + 1} ·{' '}
+                    {robotNames[player === 0 ? robot1 : robot2]}
+                  </p>
+                  <TurretControls
+                    player={player}
+                    angle={state?.turretAngle || 0}
+                    mode={state?.turretMode || 'Tracking goal'}
+                    disabled={!s.ready || (timed && s.phase !== 'MANUAL')}
+                    press={(key, down) => {
+                      if (down && !s.running) sim.current?.toggle();
+                      sim.current?.press(key, down);
+                    }}
+                    center={() => {
+                      if (!s.running) sim.current?.toggle();
+                      sim.current?.centerTurret(player);
+                    }}
+                    track={() => {
+                      if (!s.running) sim.current?.toggle();
+                      sim.current?.trackTurret(player);
+                    }}
+                  />
+                  <ShootingControls
+                    player={player}
+                    shot={shot}
+                    ready={s.ready}
+                    canShoot={
+                      s.running &&
+                      !!state?.magazine.length &&
+                      (!timed || s.phase === 'MANUAL')
+                    }
+                    adjust={(v) => sim.current?.adjustShot(player, v)}
+                    fit={() => sim.current?.matchShotRange(player)}
+                    shoot={() => sim.current?.shootPlayer(player)}
+                  />
+                  <p className="aim-note">
+                    Turret buttons start driving. Power and angle can be set
+                    before you start.
+                  </p>
+                </>
+              );
+            })()}
+          </section>
           <div className="panel-heading">
             <span>DRIVER STATION</span>
             <span className="live-badge">● LIVE</span>
@@ -462,98 +538,6 @@ export default function Home() {
               Feed tray ({s.reserve || 0}) <kbd>H</kbd>
             </button>
           </div>
-          <section className="panel-section">
-            <div className="section-title">
-              <h3>Launcher</h3>
-              <Crosshair size={17} />
-            </div>
-            <div className="setting-row">
-              <label htmlFor="aim-assist">Aim assist</label>
-              <Switch
-                id="aim-assist"
-                checked={assist}
-                onCheckedChange={(v) => {
-                  setAssist(v);
-                  sim.current?.configure({ assist: v });
-                }}
-              />
-            </div>
-            <TurretControls
-              player={0}
-              angle={s.turretAngle || 0}
-              mode={s.turretMode || 'Tracking goal'}
-              disabled={!s.running || (timed && s.phase !== 'MANUAL')}
-              press={(key, down) => sim.current?.press(key, down)}
-              center={() => sim.current?.centerTurret(0)}
-              track={() => sim.current?.trackTurret(0)}
-            />
-            <div className="power-label">
-              <label id="power-label">Launch speed</label>
-              <span>{assist ? 'ASSISTED' : `${power.toFixed(1)} m/s`}</span>
-            </div>
-            <Slider
-              aria-labelledby="power-label"
-              min={3}
-              max={11}
-              step={0.1}
-              value={[power]}
-              disabled={assist}
-              onValueChange={(v) => {
-                let n = Array.isArray(v) ? v[0] : v;
-                setPower(n);
-                sim.current?.configure({ power: n });
-              }}
-            />
-            <div className="power-label">
-              <label id="elevation-label">Shot elevation</label>
-              <span>{assist ? 'ASSISTED' : `${elevation}°`}</span>
-            </div>
-            <Slider
-              aria-labelledby="elevation-label"
-              min={25}
-              max={75}
-              step={1}
-              value={[elevation]}
-              disabled={assist}
-              onValueChange={(v) => {
-                const angle = Array.isArray(v) ? v[0] : v;
-                setElevation(angle);
-                sim.current?.configure({ elevation: angle });
-              }}
-            />
-            <div className="range-readout">
-              <span>
-                Goal <b>{(s.goalDistance || 0).toFixed(1)} m</b>
-              </span>
-              <span>
-                Estimated reach{' '}
-                <b>
-                  {s.shotRange == null
-                    ? 'Too low'
-                    : `${s.shotRange.toFixed(1)} m`}
-                </b>
-              </span>
-            </div>
-            <p className="hint">
-              {assist
-                ? 'Aim assist compensates movement. Shoot from a taped launch zone.'
-                : '− / + adjusts speed · [ / ] adjusts elevation. D-pad works too. Range estimate excludes collisions.'}
-            </p>
-            <button
-              className="shoot-button"
-              disabled={
-                !s.running ||
-                !s.magazine.length ||
-                (timed && s.phase !== 'MANUAL')
-              }
-              onClick={() => sim.current?.shoot()}
-            >
-              {s.flywheel && s.flywheel < 94
-                ? `Spinning up · ${s.flywheel}%`
-                : 'Launch artifact'}{' '}
-              <kbd>SPACE</kbd>
-            </button>
-          </section>
           <section className="panel-section">
             <div className="section-title">
               <h3>Classifier · {s.motif || 'GPP'}</h3>
@@ -637,15 +621,6 @@ export default function Home() {
                 <h3>Player 2 · {robotNames[robot2]}</h3>
                 <span>{s.player2?.controller || 'Keyboard'}</span>
               </div>
-              <TurretControls
-                player={1}
-                angle={s.player2?.turretAngle || 0}
-                mode={s.player2?.turretMode || 'Tracking goal'}
-                disabled={!s.running || (timed && s.phase !== 'MANUAL')}
-                press={(key, down) => sim.current?.press(key, down)}
-                center={() => sim.current?.centerTurret(1)}
-                track={() => sim.current?.trackTurret(1)}
-              />
               <div className="second-stats">
                 <span>
                   Magazine <b>{s.player2?.magazine.length || 0}/3</b>

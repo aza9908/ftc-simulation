@@ -1,0 +1,42 @@
+FTC ROBOT CAD ARCHIVE LICENSE
+
+Copyright (c) 2026 Adrian Contraș
+
+The CAD models, mechanical designs, drawings, documentation, renders, and other original design files contained in this repository or distributed through its GitHub Releases are made available for personal, educational, research, and non-commercial use.
+
+You may:
+
+* View and study the designs.
+* Download and archive the files.
+* Modify the designs for personal, educational, research, or non-commercial robotics projects.
+* Manufacture parts based on the designs for those purposes.
+* Reference or showcase modified versions of the designs, provided appropriate credit is given.
+
+You may not:
+
+* Sell the original files or modified versions of them.
+* Sell products, robots, assemblies, kits, or parts substantially derived from these designs without prior written permission.
+* Redistribute the original CAD archives or substantial portions of them as your own work.
+* Remove or misrepresent authorship or attribution.
+* Use the designs, documentation, renders, or other repository materials for commercial purposes without prior written permission.
+
+Redistribution of modified designs for non-commercial purposes is permitted only if:
+
+1. Adrian Contraș is clearly credited as the author of the original design.
+2. The modifications are clearly identified.
+3. This license, or a reference to it, is included with the redistributed work.
+4. No implication is made that the modified design is endorsed by Adrian Contraș or the original robotics teams.
+
+The designs are provided "AS IS", without warranty of any kind, express or implied. No guarantee is made regarding safety, structural integrity, manufacturing suitability, competition legality, reliability, or fitness for a particular purpose.
+
+Anyone manufacturing, modifying, operating, or otherwise using these designs assumes all associated risks and responsibilities.
+
+FIRST, FIRST Tech Challenge, and any other third-party trademarks, components, logos, or materials referenced by these projects remain the property of their respective owners and are not licensed under this document.
+
+Commercial licensing or other permissions may be granted separately by the copyright holder.
+
+For permission requests, contact the author through:
+
+https://adriancontras.dev/
+
+Copyright (c) 2026 Adrian Contraș. All rights reserved except for the permissions expressly granted above.
