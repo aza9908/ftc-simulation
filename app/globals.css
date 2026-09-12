@@ -1663,3 +1663,147 @@ kbd {
   background: #263f63;
   border-color: #557eb1;
 }
+
+.turret-controls {
+  border: 1px solid #506275;
+  background: #202c38;
+  border-radius: 6px;
+  padding: 10px;
+  margin: 12px 0;
+}
+.turret-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+}
+.turret-heading span {
+  font-variant-numeric: tabular-nums;
+  color: #cee2ff;
+}
+.turret-bearing {
+  position: relative;
+  margin: 8px auto;
+  width: 44px;
+  height: 44px;
+  border: 2px solid #657c95;
+  border-radius: 50%;
+  background: #354555;
+}
+.turret-bearing i {
+  display: block;
+  position: absolute;
+  width: 4px;
+  height: 22px;
+  background: #c8fa71;
+  left: 18px;
+  top: 0;
+  transform-origin: 2px 20px;
+}
+.turret-buttons {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 5px;
+}
+.turret-buttons button,
+.turret-mode button {
+  background: #34485d;
+  border: 1px solid #69839c;
+  color: #f0f6fe;
+  font-size: 14px;
+  padding: 8px 5px;
+  border-radius: 4px;
+  touch-action: none;
+}
+.turret-buttons button:active {
+  background: #547ba1;
+}
+.turret-buttons button:disabled,
+.turret-mode button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.turret-mode {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+  gap: 8px;
+}
+.turret-mode button {
+  padding: 4px 7px;
+  font-size: 12px;
+}
+.turret-controls .hint {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.model-importer {
+  margin: 0 0 14px;
+  border: 1px solid #40515a;
+  border-radius: 10px;
+  background: #202e36;
+  color: #e1e9ed;
+}
+.model-importer summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.model-importer summary span {
+  float: right;
+  font-size: 11px;
+  color: #bce884;
+}
+.model-import-body {
+  padding: 0 16px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.model-import-body p {
+  margin: 4px 0 10px;
+}
+.model-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+.model-import-actions label {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+}
+.model-import-actions button,
+.model-import-actions select {
+  border: 1px solid #53656f;
+  background: #30434d;
+  color: #edf5f9;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.model-import-actions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.model-import-body .model-import-status {
+  margin-top: 10px;
+  color: #c0ec94;
+  overflow-wrap: anywhere;
+}
+.model-import-body .model-import-error {
+  color: #ffc0b7;
+}
+.model-import-body ol {
+  padding-left: 20px;
+  color: #c0ccd3;
+}
+.model-import-body .hint {
+  max-width: 84ch;
+}

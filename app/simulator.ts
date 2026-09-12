@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { readRobotModel, disposeModel, type RobotModel } from './robot-model';
 import {
   driveImpulse,
+  turretStep,
   dragDelta,
   flightAt,
   mecanumDemand,
@@ -24,12 +26,16 @@ export type ScoreDetail = {
   base: number;
 };
 export type Snapshot = {
+  turretAngle?: number;
+  turretMode?: string;
   robot1?: number;
   robot2?: number;
   alliance?: string;
   started?: boolean;
   players?: number;
   player2?: {
+    turretAngle: number;
+    turretMode: string;
     magazine: string[];
     intake: boolean;
     speed: number;
@@ -132,6 +138,12 @@ export class Simulator {
     robot1: 0,
     robot2: 2,
   };
+  robotModels = new Map<number, RobotModel>();
+  modelRequests = new Map<number, number>();
+  turretAngles = [0, 0];
+  turretRates = [0, 0];
+  turretManual = [false, false];
+  turretCenter = [false, false];
   controllerSlots: number[] = [];
   secondIntake = false;
   secondFlywheel = 0;
@@ -747,6 +759,7 @@ export class Simulator {
       );
     }
     this.box(0, 0.032, -0.18, 0.17, 0.04, 0.03, '#cafb63', false, this.turret);
+    this.turret.name = 'launcher-turret';
     this.robotMesh.add(this.turret);
     let intake = new THREE.Mesh(
       new THREE.CylinderGeometry(0.038, 0.038, 0.28, 16),
@@ -793,6 +806,63 @@ export class Simulator {
     this.balls.push(b);
     return b;
   }
+  async importRobotModel(id: number, file: File) {
+    const request = (this.modelRequests.get(id) || 0) + 1;
+    this.modelRequests.set(id, request);
+    if (this.s.running) this.toggle();
+    const model = await readRobotModel(file);
+    if (this.disposed || this.modelRequests.get(id) !== request) {
+      disposeModel(model.root);
+      return null;
+    }
+    const old = this.robotModels.get(id);
+    if (old) disposeModel(old.root);
+    this.robotModels.set(id, model);
+    this.applyRobotModels();
+    return {
+      name: model.name,
+      turret: !!model.turret,
+      triangles: model.triangles,
+    };
+  }
+  removeRobotModel(id: number) {
+    this.modelRequests.set(id, (this.modelRequests.get(id) || 0) + 1);
+    const old = this.robotModels.get(id);
+    if (old) disposeModel(old.root);
+    this.robotModels.delete(id);
+    this.applyRobotModels();
+  }
+  rotateRobotModel(id: number) {
+    const model = this.robotModels.get(id);
+    if (model) model.root.rotation.y += Math.PI / 2;
+  }
+  applyRobotModels() {
+    if (!this.robotModels) return;
+    for (const model of this.robotModels.values())
+      model.root.removeFromParent();
+    for (const mesh of [this.robotMesh, ...this.bots.map((b) => b.mesh)]) {
+      const model = this.robotModels.get(mesh.userData.robotId);
+      for (const child of mesh.children)
+        child.visible =
+          !model ||
+          !!child.userData.robotLabel ||
+          (child.name === 'launcher-turret' && !model.turret);
+      if (model) mesh.add(model.root);
+    }
+    this.updateRobotModels();
+  }
+  updateRobotModels() {
+    if (!this.robotModels) return;
+    for (const [id, model] of this.robotModels) {
+      if (model.turret)
+        model.turret.rotation.y =
+          id === this.options.robot1
+            ? this.turretAngles[0]
+            : this.options.players === 2 && id === this.options.robot2
+              ? this.turretAngles[1]
+              : 0;
+    }
+  }
   get playerSide() {
     return (this.options.robot1 ?? 0) < 2 ? 1 : -1;
   }
@@ -814,8 +884,13 @@ export class Simulator {
     ][id];
   }
   styleRobot(mesh: THREE.Group, id: number) {
+    mesh.userData.robotId = id;
     mesh.traverse((o) => {
-      if (o instanceof THREE.Mesh && !o.userData.robotLabel) {
+      if (
+        o instanceof THREE.Mesh &&
+        !o.userData.robotLabel &&
+        !o.userData.importedRobot
+      ) {
         const material = o.material as THREE.MeshStandardMaterial;
         if (
           material.color &&
@@ -849,6 +924,10 @@ export class Simulator {
     }
   }
   reset() {
+    this.turretAngles = [0, 0];
+    this.turretRates = [0, 0];
+    this.turretManual = [false, false];
+    this.turretCenter = [false, false];
     for (let b of this.balls) {
       this.world.removeRigidBody(b.body);
       this.scene.remove(b.mesh);
@@ -965,6 +1044,7 @@ export class Simulator {
       hits: 0,
       ended: false,
     });
+    this.applyRobotModels();
     this.shotClock = 0;
     this.accum = 0;
     this.emit();
@@ -980,6 +1060,10 @@ export class Simulator {
   }
   configure(v: Partial<Options>) {
     this.options = { ...this.options, ...v };
+    if (v.assist === true) {
+      this.turretManual[0] = false;
+      this.turretCenter[0] = false;
+    }
     this.options.robot1 = Math.max(
       0,
       Math.min(3, Math.floor(this.options.robot1 ?? 0)),
@@ -1031,6 +1115,8 @@ export class Simulator {
     )
       e.preventDefault();
     if (!e.repeat) {
+      if (e.code === 'KeyV') this.centerTurret(0);
+      if (e.code === 'KeyJ' && this.options.players === 2) this.centerTurret(1);
       if (e.code === 'KeyI') this.toggleSecondIntake();
       if (e.code === 'Enter') this.toggle();
       if (e.code === 'KeyR') this.toggleIntake();
@@ -1093,27 +1179,122 @@ export class Simulator {
     o.start();
     o.stop(this.audio.currentTime + 0.16);
   }
-  getLaunch() {
-    let p = this.robot.translation();
-    let yaw = this.options.assist
-      ? Math.atan2(-(-this.playerSide * 1.55 - p.x), -(-1.59 - p.z))
-      : this.yaw;
-    let x = p.x - Math.sin(yaw) * 0.23,
-      z = p.z - Math.cos(yaw) * 0.23;
-    let start = { x, y: p.y + 0.27, z };
-    let velocity = this.options.assist
-      ? launchVelocity(start, {
-          x: -this.playerSide * 1.55,
-          y: 1.055,
-          z: -1.59,
-        })
-      : manualLaunch(this.options.power, this.options.elevation || 55, yaw, {
-          x: this.robot.linvel().x + this.robot.angvel().y * (z - p.z),
-          z: this.robot.linvel().z - this.robot.angvel().y * (x - p.x),
-        });
-    // Assisted turret compensates platform motion through relative exit velocity.
-    // Ballistic world velocity remains unchanged; manual shots inherit chassis motion.
-    return { start, velocity, yaw };
+  turretAssisted(player: 0 | 1) {
+    return (
+      (player === 0 ? this.options.assist : true) && !this.turretManual[player]
+    );
+  }
+  centerTurret(player: 0 | 1) {
+    this.turretManual[player] = true;
+    this.turretCenter[player] = true;
+    this.emit();
+  }
+  trackTurret(player: 0 | 1) {
+    if (player === 0) this.options.assist = true;
+    this.turretManual[player] = false;
+    this.turretCenter[player] = false;
+    this.emit();
+  }
+  updateTurrets(pads: (Gamepad | undefined)[], active: boolean) {
+    for (const player of [0, 1] as const) {
+      if (player === 1 && this.options.players !== 2) continue;
+      const body = player === 0 ? this.robot : this.bots[1].body,
+        p = body.translation(),
+        q = body.rotation();
+      const chassis = Math.atan2(
+        2 * (q.w * q.y + q.x * q.z),
+        1 - 2 * (q.y * q.y + q.z * q.z),
+      );
+      const pad = pads[player],
+        left = player === 0 ? 'KeyZ' : 'KeyK',
+        right = player === 0 ? 'KeyX' : 'KeyL';
+      const input = active
+        ? Math.max(
+            -1,
+            Math.min(
+              1,
+              Number(this.keys.has(left)) -
+                Number(this.keys.has(right)) -
+                (pad?.buttons[5]?.pressed ? deadzone(pad.axes[2] || 0) : 0),
+            ),
+          )
+        : 0;
+      if (input) {
+        this.turretManual[player] = true;
+        this.turretCenter[player] = false;
+      }
+      const side = player === 0 ? this.playerSide : this.bots[1].side;
+      const heading = Math.atan2(-(-side * 1.55 - p.x), -(-1.59 - p.z));
+      const relative = Math.atan2(
+        Math.sin(heading - chassis),
+        Math.cos(heading - chassis),
+      );
+      const target = !active
+        ? null
+        : this.turretAssisted(player)
+          ? relative
+          : this.turretCenter[player]
+            ? 0
+            : null;
+      const next = turretStep(
+        this.turretAngles[player],
+        this.turretRates[player],
+        input,
+        target,
+        DT,
+      );
+      this.turretAngles[player] = next.angle;
+      this.turretRates[player] = next.velocity;
+    }
+  }
+  getLaunch(player: 0 | 1 = 0) {
+    const body = player === 0 ? this.robot : this.bots[1].body,
+      side = player === 0 ? this.playerSide : this.bots[1].side;
+    const p = body.translation(),
+      q = body.rotation();
+    const chassisYaw = Math.atan2(
+      2 * (q.w * q.y + q.x * q.z),
+      1 - 2 * (q.y * q.y + q.z * q.z),
+    );
+    const yaw = chassisYaw + (this.turretAngles?.[player] || 0);
+    const start = {
+      x: p.x - Math.sin(yaw) * 0.23,
+      y: p.y + 0.27,
+      z: p.z - Math.cos(yaw) * 0.23,
+    };
+    const chassis = body.linvel(),
+      omega = body.angvel().y + (this.turretRates?.[player] || 0);
+    const muzzle = {
+      x: chassis.x + omega * (start.z - p.z),
+      z: chassis.z - omega * (start.x - p.x),
+    };
+    const ideal = launchVelocity(start, {
+      x: -side * 1.55,
+      y: 1.055,
+      z: -1.59,
+    });
+    const heading = Math.atan2(-ideal.x, -ideal.z);
+    const error = Math.atan2(Math.sin(heading - yaw), Math.cos(heading - yaw));
+    const assisted = this.turretAssisted(player);
+    const velocity = assisted
+      ? {
+          x: -Math.sin(yaw) * Math.hypot(ideal.x, ideal.z),
+          y: ideal.y,
+          z: -Math.cos(yaw) * Math.hypot(ideal.x, ideal.z),
+        }
+      : manualLaunch(
+          this.options.power,
+          this.options.elevation || 55,
+          yaw,
+          muzzle,
+        );
+    return {
+      start,
+      velocity,
+      yaw,
+      aligned: !assisted || Math.abs(error) < 0.025,
+      muzzle,
+    };
   }
   shoot() {
     if (this.options.timed && this.s.phase !== 'MANUAL') return;
@@ -1129,6 +1310,11 @@ export class Simulator {
       this.s.message = 'Flywheel spinning up…';
       return;
     }
+    if (!this.getLaunch().aligned) {
+      this.s.message =
+        'Turret aligning · rotate the chassis if the target is beyond the turret stop';
+      return;
+    }
     this.fireRequested = false;
     let b = this.inventory.shift()!,
       { start, velocity } = this.getLaunch();
@@ -1140,12 +1326,7 @@ export class Simulator {
     b.body.setLinvel(velocity, true);
     b.body.setAngvel({ x: 10, y: 0, z: 0 }, true);
     b.mesh.visible = true;
-    const chassis = this.robot.linvel(),
-      omega = this.robot.angvel().y;
-    const muzzle = {
-      x: chassis.x + omega * (start.z - p.z),
-      z: chassis.z - omega * (start.x - p.x),
-    };
+    const muzzle = this.getLaunch().muzzle;
     this.robot.applyImpulseAtPoint(
       {
         x: -(velocity.x - muzzle.x) * b.body.mass(),
@@ -1185,6 +1366,7 @@ export class Simulator {
       buttons = pad?.mapping === 'standard' ? pad.buttons : [];
     if (buttons[4]?.pressed && !this.padButtons[4]) this.toggleIntake();
     if (buttons[9]?.pressed && !this.padButtons[9]) this.toggle();
+    if (buttons[11]?.pressed && !this.padButtons[11]) this.centerTurret(0);
     if (buttons[3]?.pressed && !this.padButtons[3])
       this.options.view =
         this.options.view === 'Field'
@@ -1194,6 +1376,8 @@ export class Simulator {
             : 'Field';
     const secondButtons = pads[1]?.buttons || [];
     if (this.options.players === 2) {
+      if (secondButtons[11]?.pressed && !this.secondPadButtons?.[11])
+        this.centerTurret(1);
       if (secondButtons[4]?.pressed && !this.secondPadButtons?.[4])
         this.toggleSecondIntake();
       if (secondButtons[9]?.pressed && !this.secondPadButtons?.[9])
@@ -1213,7 +1397,8 @@ export class Simulator {
     this.reverseClock = Math.max(0, this.reverseClock - DT);
     this.adjustmentClock = Math.max(0, (this.adjustmentClock || 0) - DT);
     const canDrive = !this.options.timed || this.s.phase === 'MANUAL';
-    if (canDrive && !this.options.assist && this.adjustmentClock === 0) {
+    this.updateTurrets(pads, canDrive);
+    if (canDrive && !this.turretAssisted(0) && this.adjustmentClock === 0) {
       const power =
         Number(this.keys.has('Equal') || buttons[15]?.pressed) -
         Number(this.keys.has('Minus') || buttons[14]?.pressed);
@@ -1273,7 +1458,7 @@ export class Simulator {
     let turn =
       Number(this.keys.has('KeyQ')) -
       Number(this.keys.has('KeyE')) -
-      deadzone(axes[2] || 0);
+      (buttons[5]?.pressed ? 0 : deadzone(axes[2] || 0));
     if (!canDrive) turn = 0;
     const demand = mecanumDemand(x, z, turn, this.yaw);
     x = demand.x;
@@ -1496,7 +1681,8 @@ export class Simulator {
       mat.opacity = this.s.nearGate ? 0.85 : 0.5;
     }
     let shot = this.getLaunch();
-    this.turret.rotation.y = shot.yaw - this.yaw;
+    this.turret.rotation.y = this.turretAngles[0];
+    this.updateRobotModels();
     if (this.intakeRoller)
       this.intakeRoller.rotation.x +=
         this.s.running && this.s.intake ? elapsed * 35 : 0;
@@ -1505,6 +1691,12 @@ export class Simulator {
         q = bot.body.rotation();
       bot.mesh.position.set(p.x, p.y, p.z);
       bot.mesh.quaternion.set(q.x, q.y, q.z, q.w);
+      const turret = bot.mesh.getObjectByName('launcher-turret');
+      if (turret)
+        turret.rotation.y =
+          bot === this.bots[1] && this.options.players === 2
+            ? this.turretAngles[1]
+            : 0;
     }
     for (let b of this.balls) {
       if (b.state === 'reserve') continue;
@@ -1576,6 +1768,8 @@ export class Simulator {
     this.frame = requestAnimationFrame(this.tick);
   };
   emit() {
+    this.s.turretAngle = ((this.turretAngles?.[0] || 0) * 180) / Math.PI;
+    this.s.turretMode = this.turretAssisted(0) ? 'Tracking goal' : 'Manual';
     this.s.robot1 = this.options.robot1 ?? 0;
     this.s.robot2 = this.options.robot2 ?? 2;
     this.s.alliance = this.allianceName;
@@ -1584,6 +1778,8 @@ export class Simulator {
       const b = this.bots[1],
         p = b.body.translation();
       this.s.player2 = {
+        turretAngle: ((this.turretAngles?.[1] || 0) * 180) / Math.PI,
+        turretMode: this.turretAssisted(1) ? 'Tracking goal' : 'Manual',
         magazine: b.inventory.map((v) => v.color),
         intake: this.secondIntake,
         speed: Math.hypot(b.body.linvel().x, b.body.linvel().z),
@@ -1595,7 +1791,7 @@ export class Simulator {
     this.s.flywheel = Math.round(this.flywheel * 100);
     this.s.elevation = this.options.elevation || 55;
     this.s.power = this.options.power;
-    this.s.assist = this.options.assist;
+    this.s.assist = this.turretAssisted(0);
     const launch = this.getLaunch();
     this.s.goalDistance = Math.hypot(
       -this.playerSide * 1.55 - launch.start.x,
@@ -1785,7 +1981,7 @@ export class Simulator {
     const active = !this.options.timed || this.s.phase === 'MANUAL';
     const axes = pad?.axes || [],
       buttons = pad?.buttons || [];
-    if (active && !this.options.assist && this.adjustmentClock === 0) {
+    if (active && !this.turretAssisted(1) && this.adjustmentClock === 0) {
       const power =
           Number(!!buttons[15]?.pressed) - Number(!!buttons[14]?.pressed),
         elevation =
@@ -1823,7 +2019,7 @@ export class Simulator {
     let turn = active
       ? Number(this.keys.has('Comma')) -
         Number(this.keys.has('Period')) -
-        deadzone(axes[2] || 0)
+        (buttons[5]?.pressed ? 0 : deadzone(axes[2] || 0))
       : 0;
     const magnitude = Math.max(1, Math.hypot(x, z));
     x /= magnitude;
@@ -1904,30 +2100,10 @@ export class Simulator {
       bot.inventory.length &&
       bot.cooldown === 0 &&
       this.secondFlywheel > 0.86 &&
-      inLaunchZone(p.x, p.z)
+      inLaunchZone(p.x, p.z) &&
+      this.getLaunch(1).aligned
     ) {
-      const yaw = this.options.assist
-        ? Math.atan2(-(-bot.side * 1.55 - p.x), -(-1.59 - p.z))
-        : bot.yaw;
-      const start = {
-        x: p.x - Math.sin(yaw) * 0.23,
-        y: p.y + 0.27,
-        z: p.z - Math.cos(yaw) * 0.23,
-      };
-      const chassis = bot.body.linvel(),
-        omega = bot.body.angvel().y;
-      const muzzle = {
-        x: chassis.x + omega * (start.z - p.z),
-        z: chassis.z - omega * (start.x - p.x),
-      };
-      const velocity = this.options.assist
-        ? launchVelocity(start, { x: -bot.side * 1.55, y: 1.055, z: -1.59 })
-        : manualLaunch(
-            this.options.power,
-            this.options.elevation || 55,
-            yaw,
-            muzzle,
-          );
+      const { start, velocity, muzzle } = this.getLaunch(1);
       const b = bot.inventory.shift()!;
       b.state = 'flight';
       b.owner = 3;
@@ -2081,6 +2257,8 @@ export class Simulator {
     window.removeEventListener('blur', this.blur);
     document.removeEventListener('visibilitychange', this.visibility);
     this.contextLife.abort();
+    for (const model of this.robotModels.values()) disposeModel(model.root);
+    this.robotModels.clear();
     this.world.free();
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.Line) {

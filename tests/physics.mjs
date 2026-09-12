@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 fs.mkdirSync('work', { recursive: true });
-for (const name of ['physics', 'simulator']) {
+for (const name of ['physics', 'robot-model', 'simulator']) {
   let src = fs
     .readFileSync(`app/${name}.ts`, 'utf8')
-    .replace("'./physics'", "'./physics.mjs'");
+    .replace("'./physics'", "'./physics.mjs'")
+    .replace("'./robot-model'", "'./robot-model.mjs'");
   fs.writeFileSync(
     `work/${name}.mjs`,
     ts.transpileModule(src, {
@@ -28,6 +29,8 @@ Object.assign(s, {
   robotMesh: new THREE.Group(),
   turret: new THREE.Group(),
   wheels: [],
+  robotModels: new Map(),
+  modelRequests: new Map(),
   balls: [],
   gates: [],
   inventory: [],
@@ -381,6 +384,8 @@ for (const id of [0, 1, 2, 3]) {
   assert(Math.abs(s.robot.translation().x - s.robotSpawn(id).x) < 0.0001);
   assert.equal(s.inventory.length, 3);
   assert.equal(s.balls.length, 36);
+  step(200); // The physical turret needs time to slew toward its alliance goal.
+  assert(s.getLaunch().aligned, 'turret reaches goal bearing before firing');
   const targetX = -s.playerSide * 1.55;
   assert(
     Math.sign(s.getLaunch().velocity.x) ===
@@ -419,6 +424,217 @@ assert.equal(s.s.redScore, 0);
 s.configure({ robot1: 2, robot2: 2 });
 assert.notEqual(s.options.robot1, s.options.robot2);
 s.configure({ robot1: 0, robot2: 2, players: 1, timed: false });
+s.reset();
+// Turrets slew independently, keep their heading, and launch along the barrel.
+s.configure({ robot1: 0, robot2: 2, players: 2, timed: false, assist: true });
+s.reset();
+s.s.running = true;
+s.flywheel = 1;
+s.shoot();
+assert.equal(s.s.shots, 0, 'assisted shot waits for turret alignment');
+assert(s.fireRequested);
+step(120);
+assert.equal(s.s.shots, 1, 'pending shot fires once after alignment');
+s.reset();
+s.s.running = true;
+s.keys.add('KeyZ');
+step(60);
+assert(!s.turretAssisted(0));
+assert(
+  s.turretAssisted(1),
+  'Player 1 manual aiming does not override Player 2',
+);
+s.keys.add('KeyL');
+step(60);
+s.keys.clear();
+step(60);
+assert(s.turretAngles[0] > 1 && s.turretAngles[1] < -0.5);
+assert(
+  Math.abs(s.robot.rotation().y) < 0.001,
+  'turret keys leave chassis still',
+);
+assert(Math.abs(s.bots[1].body.rotation().y) < 0.001);
+const manualShot = s.getLaunch(),
+  shotBall = s.inventory[0];
+s.shoot();
+assert.equal(s.s.shots, 1);
+assert(Math.abs(shotBall.body.linvel().x - manualShot.velocity.x) < 1e-5);
+assert(Math.abs(shotBall.body.translation().x - manualShot.start.x) < 1e-5);
+assert(manualShot.velocity.x < -1, 'turned turret launches left of chassis');
+s.keys.add('KeyZ');
+step(500);
+s.keys.clear();
+assert(Math.abs(s.turretAngles[0] - (170 * Math.PI) / 180) < 1e-9);
+assert.equal(s.turretRates[0], 0, 'cable stop arrests the turret');
+s.centerTurret(0);
+s.centerTurret(1);
+step(400);
+assert(
+  Math.abs(s.turretAngles[0]) < 0.001 && Math.abs(s.turretAngles[1]) < 0.001,
+);
+s.s.running = false;
+s.keys.add('KeyX');
+const pausedAngle = s.turretAngles[0];
+step(60);
+assert.equal(s.turretAngles[0], pausedAngle, 'paused turret does not move');
+s.keys.clear();
+s.s.running = true;
+pad1.connected = true;
+pad1.axes = [0, 0, 1, 0];
+pad1.buttons[5].pressed = true;
+pad2.connected = true;
+pad2.axes = [0, 0, -1, 0];
+pad2.buttons.forEach((b) => {
+  b.pressed = false;
+  b.value = 0;
+});
+pad2.buttons[5].pressed = true;
+Object.defineProperty(navigator, 'getGamepads', {
+  value: () => [pad1, pad2],
+  configurable: true,
+});
+s.controllerSlots = [0, 1];
+step(70);
+assert(s.turretAngles[0] < -0.7 && s.turretAngles[1] > 0.7);
+assert(
+  Math.abs(s.bots[1].body.rotation().y) < 0.001,
+  'R1 routes stick away from chassis',
+);
+pad1.axes = [0, 0, 0, 0];
+pad1.buttons[5].pressed = false;
+pad1.buttons[11].pressed = true;
+pad2.axes = [0, 0, 0, 0];
+pad2.buttons[5].pressed = false;
+pad2.buttons[11].pressed = true;
+step(300);
+assert(
+  Math.abs(s.turretAngles[0]) < 0.001 && Math.abs(s.turretAngles[1]) < 0.001,
+  'R3 centers both turrets',
+);
+pad1.buttons[11].pressed = false;
+pad2.buttons[11].pressed = false;
+s.robot.setTranslation({ x: 0.5, y: 0.14, z: 0.5 }, true);
+pad1.axes = [0, 0, 1, 0];
+step(60);
+assert(
+  Math.abs(s.robot.rotation().y) > 0.1,
+  'release R1 to steer chassis again',
+);
+Object.defineProperty(navigator, 'getGamepads', {
+  value: () => [],
+  configurable: true,
+});
+s.configure({ players: 1, robot1: 0, robot2: 2, timed: false });
+s.reset();
+// Real GLB parsing, pivot animation, per-identity attachment and restoration.
+const M = await import('../work/robot-model.mjs');
+function makeGlb(external = false) {
+  const positions = new Float32Array([-1, 0, -1, 1, 0, -1, 0, 1, 0, 0, 0, 1]);
+  const indices = new Uint16Array([0, 1, 2, 1, 3, 2, 3, 0, 2, 0, 3, 1]);
+  const bin = new Uint8Array(positions.byteLength + indices.byteLength);
+  bin.set(new Uint8Array(positions.buffer));
+  bin.set(new Uint8Array(indices.buffer), positions.byteLength);
+  const json = {
+    asset: { version: '2.0' },
+    scene: 0,
+    scenes: [{ nodes: [0, 1] }],
+    nodes: [
+      { mesh: 0, scale: [1, 0.4, 1] },
+      { name: 'Turret', translation: [0, 0.5, 0], children: [2] },
+      {
+        name: 'Barrel',
+        mesh: 0,
+        translation: [0, 0.1, -0.3],
+        scale: [0.2, 0.1, 0.6],
+      },
+    ],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+    buffers: [
+      {
+        byteLength: bin.length,
+        ...(external ? { uri: 'https://example.com/model.bin' } : {}),
+      },
+    ],
+    bufferViews: [
+      { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+      {
+        buffer: 0,
+        byteOffset: positions.byteLength,
+        byteLength: indices.byteLength,
+      },
+    ],
+    accessors: [
+      {
+        bufferView: 0,
+        componentType: 5126,
+        count: 4,
+        type: 'VEC3',
+        min: [-1, 0, -1],
+        max: [1, 1, 1],
+      },
+      { bufferView: 1, componentType: 5123, count: 12, type: 'SCALAR' },
+    ],
+  };
+  const str = JSON.stringify(json),
+    padded = str.padEnd(Math.ceil(str.length / 4) * 4, ' ');
+  const data = new ArrayBuffer(28 + padded.length + bin.length),
+    dv = new DataView(data);
+  [0x46546c67, 2, data.byteLength, padded.length, 0x4e4f534a].forEach((n, i) =>
+    dv.setUint32(i * 4, n, true),
+  );
+  new Uint8Array(data, 20, padded.length).set(new TextEncoder().encode(padded));
+  dv.setUint32(20 + padded.length, bin.length, true);
+  dv.setUint32(24 + padded.length, 0x004e4942, true);
+  new Uint8Array(data, 28 + padded.length).set(bin);
+  return data;
+}
+assert.throws(() => M.validateGlb(new ArrayBuffer(8)), /valid GLB/);
+assert.throws(() => M.validateGlb(makeGlb(true)), /Embed all/);
+const info = await s.importRobotModel(
+  0,
+  new File([makeGlb()], 'test-robot.glb'),
+);
+assert(info.turret && info.triangles === 8);
+const imported = s.robotModels.get(0);
+assert.equal(imported.root.parent, s.robotMesh);
+const box = new THREE.Box3().setFromObject(imported.root),
+  size = box.getSize(new THREE.Vector3());
+assert(size.x <= 0.44001 && size.z <= 0.44001 && size.y <= 0.48001);
+const barrel = imported.root.getObjectByName('Barrel');
+const before = barrel.getWorldPosition(new THREE.Vector3());
+s.turretAngles[0] = Math.PI / 2;
+s.updateRobotModels();
+assert(
+  barrel.getWorldPosition(new THREE.Vector3()).distanceTo(before) > 0.05,
+  'imported turret rotates around exported origin',
+);
+await assert.rejects(() =>
+  s.importRobotModel(0, new File(['invalid'], 'broken.glb')),
+);
+assert.equal(
+  s.robotModels.get(0),
+  imported,
+  'failed import preserves the working model',
+);
+s.configure({ robot1: 2, robot2: 0, players: 2 });
+s.reset();
+assert.equal(
+  imported.root.parent,
+  s.bots[1].mesh,
+  'model follows robot identity when players swap',
+);
+assert.equal(
+  imported.turret.rotation.y,
+  0,
+  'field reset centers imported turret',
+);
+s.removeRobotModel(0);
+assert.equal(imported.root.parent, null);
+assert(
+  s.bots[1].mesh.children.every((child) => child.visible),
+  'restore reveals default robot',
+);
+s.configure({ robot1: 0, robot2: 2, players: 1 });
 s.reset();
 // Compare the aiming model against Rapier flight, without any field collisions.
 const flightWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -494,6 +710,7 @@ let frees = 0;
 const disposable = Object.create(Simulator.prototype);
 Object.assign(disposable, {
   disposed: false,
+  robotModels: new Map(),
   frame: 0,
   resize: { disconnect() {} },
   contextLife: new AbortController(),

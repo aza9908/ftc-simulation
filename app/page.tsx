@@ -17,6 +17,8 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import type { Simulator, Snapshot } from './simulator';
 import { MatchScoreboard, MatchResults } from './match-scoreboard';
+import { TurretControls } from './turret-controls';
+import { ModelImporter } from './model-importer';
 const initial: Snapshot = {
   ready: false,
   score: 0,
@@ -210,6 +212,7 @@ export default function Home() {
               parked.
             </p>
           </div>
+          <ModelImporter getSimulator={() => sim.current} ready={s.ready} />
           <section className="arena">
             <div
               ref={mount}
@@ -475,6 +478,15 @@ export default function Home() {
                 }}
               />
             </div>
+            <TurretControls
+              player={0}
+              angle={s.turretAngle || 0}
+              mode={s.turretMode || 'Tracking goal'}
+              disabled={!s.running || (timed && s.phase !== 'MANUAL')}
+              press={(key, down) => sim.current?.press(key, down)}
+              center={() => sim.current?.centerTurret(0)}
+              track={() => sim.current?.trackTurret(0)}
+            />
             <div className="power-label">
               <label id="power-label">Launch speed</label>
               <span>{assist ? 'ASSISTED' : `${power.toFixed(1)} m/s`}</span>
@@ -625,6 +637,15 @@ export default function Home() {
                 <h3>Player 2 · {robotNames[robot2]}</h3>
                 <span>{s.player2?.controller || 'Keyboard'}</span>
               </div>
+              <TurretControls
+                player={1}
+                angle={s.player2?.turretAngle || 0}
+                mode={s.player2?.turretMode || 'Tracking goal'}
+                disabled={!s.running || (timed && s.phase !== 'MANUAL')}
+                press={(key, down) => sim.current?.press(key, down)}
+                center={() => sim.current?.centerTurret(1)}
+                track={() => sim.current?.trackTurret(1)}
+              />
               <div className="second-stats">
                 <span>
                   Magazine <b>{s.player2?.magazine.length || 0}/3</b>
@@ -693,6 +714,9 @@ export default function Home() {
         </span>
         <span>
           <kbd>Q E</kbd> Turn
+        </span>
+        <span>
+          <kbd>Z X</kbd> Turret
         </span>
         <span>
           <kbd>R</kbd> Intake
@@ -766,6 +790,11 @@ export default function Home() {
             <span>Options / Enter</span>
             <b>Pause / resume</b>
           </div>
+          <p>
+            Turret: Player 1 holds Z/X, Player 2 holds K/L. V/J centers each
+            turret. On a controller, hold R1 while moving the right stick; press
+            R3 to center. Release R1 to steer the chassis again.
+          </p>
           <h3>Simulation notes</h3>
           <p>
             WASD moves relative to the field in Field/Top view, and relative to

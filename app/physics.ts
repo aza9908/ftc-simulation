@@ -182,3 +182,26 @@ export function mecanumDemand(x: number, z: number, turn: number, yaw: number) {
   );
   return { x: x / scale, z: z / scale, turn: turn / scale };
 }
+
+/** Turret motor with bounded speed, acceleration, and cable stops at ±170°. */
+export function turretStep(
+  angle: number,
+  velocity: number,
+  input: number,
+  target: number | null,
+  dt: number,
+) {
+  const limit = (170 * Math.PI) / 180;
+  const goal =
+    target === null ? null : Math.max(-limit, Math.min(limit, target));
+  const desired = input
+    ? input * 1.6
+    : goal === null
+      ? 0
+      : Math.max(-1.6, Math.min(1.6, (goal - angle) * 6));
+  velocity += Math.max(-7 * dt, Math.min(7 * dt, desired - velocity));
+  const next = angle + velocity * dt;
+  angle = Math.max(-limit, Math.min(limit, next));
+  if (angle !== next) velocity = 0;
+  return { angle, velocity };
+}
