@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import {
   driveImpulse,
+  dragDelta,
+  flightAt,
+  mecanumDemand,
   launchVelocity,
   inLaunchZone,
   patternPoints,
@@ -13,7 +16,16 @@ import {
   basePoints,
   overLaunchLine,
 } from './physics';
+export type ScoreDetail = {
+  autoArtifacts: number;
+  autoPattern: number;
+  leave: number;
+  teleopArtifacts: number;
+  teleopPattern: number;
+  base: number;
+};
 export type Snapshot = {
+  breakdown?: [ScoreDetail, ScoreDetail];
   elevation?: number;
   power?: number;
   assist?: boolean;
@@ -700,8 +712,8 @@ export class Simulator {
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(x, y, z)
         .setCcdEnabled(true)
-        .setLinearDamping(0.035)
-        .setAngularDamping(0.25),
+        .setLinearDamping(0)
+        .setAngularDamping(0.02),
     );
     this.world.createCollider(
       RAPIER.ColliderDesc.ball(R)
@@ -809,6 +821,14 @@ export class Simulator {
     this.settleClock = 0;
     Object.assign(this.s, {
       intake: false,
+      breakdown: [0, 1].map(() => ({
+        autoArtifacts: 0,
+        autoPattern: 0,
+        leave: 0,
+        teleopArtifacts: 0,
+        teleopPattern: 0,
+        base: 0,
+      })),
       score: 0,
       classified: 0,
       overflow: 0,
@@ -957,12 +977,10 @@ export class Simulator {
     let start = { x, y: p.y + 0.27, z };
     let velocity = this.options.assist
       ? launchVelocity(start, { x: -1.55, y: 1.055, z: -1.59 })
-      : manualLaunch(
-          this.options.power,
-          this.options.elevation || 55,
-          yaw,
-          this.robot.linvel(),
-        );
+      : manualLaunch(this.options.power, this.options.elevation || 55, yaw, {
+          x: this.robot.linvel().x + this.robot.angvel().y * (z - p.z),
+          z: this.robot.linvel().z - this.robot.angvel().y * (x - p.x),
+        });
     // Assisted turret compensates platform motion through relative exit velocity.
     // Ballistic world velocity remains unchanged; manual shots inherit chassis motion.
     return { start, velocity, yaw };
@@ -997,8 +1015,19 @@ export class Simulator {
     b.body.setLinvel(velocity, true);
     b.body.setAngvel({ x: 10, y: 0, z: 0 }, true);
     b.mesh.visible = true;
-    this.robot.applyImpulse(
-      { x: -velocity.x * 0.065, y: 0, z: -velocity.z * 0.065 },
+    const chassis = this.robot.linvel(),
+      omega = this.robot.angvel().y;
+    const muzzle = {
+      x: chassis.x + omega * (start.z - p.z),
+      z: chassis.z - omega * (start.x - p.x),
+    };
+    this.robot.applyImpulseAtPoint(
+      {
+        x: -(velocity.x - muzzle.x) * b.body.mass(),
+        y: 0,
+        z: -(velocity.z - muzzle.z) * b.body.mass(),
+      },
+      start,
       true,
     );
     this.flywheel = Math.max(0, this.flywheel - 0.16);
@@ -1094,6 +1123,10 @@ export class Simulator {
       Number(this.keys.has('KeyE')) -
       deadzone(axes[2] || 0);
     if (!canDrive) turn = 0;
+    const demand = mecanumDemand(x, z, turn, this.yaw);
+    x = demand.x;
+    z = demand.z;
+    turn = demand.turn;
     let precision =
       this.keys.has('ShiftLeft') ||
       this.keys.has('ShiftRight') ||
@@ -1176,6 +1209,16 @@ export class Simulator {
       });
       if (g.side === -1) this.s.gate = g.angle / 1.4;
     }
+    for (const b of this.balls) {
+      if (!b.body.isEnabled() || b.body.isSleeping()) continue;
+      const v = b.body.linvel(),
+        d = dragDelta(v, DT),
+        mass = b.body.mass();
+      b.body.applyImpulse(
+        { x: d.x * mass, y: d.y * mass, z: d.z * mass },
+        false,
+      );
+    }
     this.world.step();
     for (let b of this.balls) {
       if (b.state === 'held' || b.state === 'reserve') continue;
@@ -1220,8 +1263,13 @@ export class Simulator {
               b.body.setLinvel({ x: 0, y: 0, z: 0.5 }, true);
               b.mesh.visible = true;
             }
-            if (side === -1) this.s.score += retained ? 3 : 1;
-            else this.s.redScore = (this.s.redScore || 0) + (retained ? 3 : 1);
+            this.award(
+              side === -1 ? 0 : 1,
+              this.s.phase === 'AUTO' || this.s.phase === 'TRANSITION'
+                ? 'autoArtifacts'
+                : 'teleopArtifacts',
+              retained ? 3 : 1,
+            );
             this.s.message = retained
               ? 'Artifact classified · +3'
               : 'Overflow · +1 — clear the gate';
@@ -1336,16 +1384,9 @@ export class Simulator {
     if (this.trajectory.visible) {
       let points = [];
       for (let i = 0; i < 40; i++) {
-        let t = i * 0.027,
-          y = shot.start.y + shot.velocity.y * t - 4.905 * t * t;
-        if (y < 0.03) break;
-        points.push(
-          new THREE.Vector3(
-            shot.start.x + shot.velocity.x * t,
-            y,
-            shot.start.z + shot.velocity.z * t,
-          ),
-        );
+        const point = flightAt(shot.start, shot.velocity, i * 0.027);
+        if (point.y < 0.03) break;
+        points.push(new THREE.Vector3(point.x, point.y, point.z));
       }
       this.trajectory.geometry.dispose();
       this.trajectory.geometry = new THREE.BufferGeometry().setFromPoints(
@@ -1698,6 +1739,11 @@ export class Simulator {
       }
     }
   }
+  award(alliance: 0 | 1, category: keyof ScoreDetail, points: number) {
+    if (this.s.breakdown) this.s.breakdown[alliance][category] += points;
+    if (alliance === 0) this.s.score += points;
+    else this.s.redScore = (this.s.redScore || 0) + points;
+  }
   advanceMatch() {
     if (this.s.phase === 'COMPLETE') return;
     this.s.time = Math.max(0, this.s.time - DT);
@@ -1712,21 +1758,26 @@ export class Simulator {
       return;
     }
     if (this.s.phase === 'TRANSITION') {
-      this.s.score += patternPoints(
-        this.ramp.map((b) => b.color),
-        this.motif,
+      this.award(
+        0,
+        'autoPattern',
+        patternPoints(
+          this.ramp.map((b) => b.color),
+          this.motif,
+        ),
       );
-      this.s.redScore =
-        (this.s.redScore || 0) +
+      this.award(
+        1,
+        'autoPattern',
         patternPoints(
           this.redRamp.map((b) => b.color),
           this.motif,
-        );
+        ),
+      );
       for (const actor of [{ body: this.robot, side: 1 }, ...this.bots]) {
         const p = actor.body.translation();
         if (!overLaunchLine(p.x, p.z)) {
-          if (actor.side === 1) this.s.score += 3;
-          else this.s.redScore = (this.s.redScore || 0) + 3;
+          this.award(actor.side === 1 ? 0 : 1, 'leave', 3);
         }
       }
       this.s.phase = 'TELEOP';
@@ -1763,13 +1814,15 @@ export class Simulator {
         this.ramp.map((b) => b.color),
         this.motif,
       );
-      this.s.score += this.s.pattern;
-      this.s.redScore =
-        (this.s.redScore || 0) +
+      this.award(0, 'teleopPattern', this.s.pattern);
+      this.award(
+        1,
+        'teleopPattern',
         patternPoints(
           this.redRamp.map((b) => b.color),
           this.motif,
-        );
+        ),
+      );
       let blueFull = 0,
         redFull = 0;
       for (const actor of [{ body: this.robot, side: 1 }, ...this.bots]) {
@@ -1778,15 +1831,15 @@ export class Simulator {
           yaw = Math.atan2(2 * q.w * q.y, 1 - 2 * q.y * q.y),
           points = basePoints(p.x, p.z, yaw, actor.side);
         if (actor.side === 1) {
-          this.s.score += points;
+          this.award(0, 'base', points);
           if (points === 10) blueFull++;
         } else {
-          this.s.redScore = (this.s.redScore || 0) + points;
+          this.award(1, 'base', points);
           if (points === 10) redFull++;
         }
       }
-      if (blueFull === 2) this.s.score += 10;
-      if (redFull === 2) this.s.redScore = (this.s.redScore || 0) + 10;
+      if (blueFull === 2) this.award(0, 'base', 10);
+      if (redFull === 2) this.award(1, 'base', 10);
       this.s.ended = true;
       this.s.running = false;
       this.s.phase = 'COMPLETE';

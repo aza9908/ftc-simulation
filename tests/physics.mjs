@@ -143,6 +143,17 @@ assert.equal(s.s.ended, false, 'physics continues after buzzer');
 step(1900);
 assert.equal(s.s.phase, 'COMPLETE');
 assert(s.s.ended);
+assert.equal(
+  Object.values(s.s.breakdown[0]).reduce((a, b) => a + b, 0),
+  s.s.score,
+  'blue results must reconcile',
+);
+assert.equal(
+  Object.values(s.s.breakdown[1]).reduce((a, b) => a + b, 0),
+  s.s.redScore,
+  'red results must reconcile',
+);
+assert(s.s.breakdown[0].autoArtifacts > 0, 'AUTO artifacts tracked separately');
 assert.equal(s.balls.length, 36, 'no artifacts are created or lost');
 // A full, single-file ramp must remain blocked until the physically nearby gate opens.
 s.options.timed = false;
@@ -232,6 +243,76 @@ assert(!s.s.intake);
 pad.buttons[9].pressed = true;
 step(1);
 assert(!s.s.running);
+// Compare the aiming model against Rapier flight, without any field collisions.
+const flightWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+flightWorld.timestep = 1 / 120;
+for (const velocity of [
+  { x: 3, y: 5, z: 0 },
+  { x: -6, y: 7, z: 2 },
+  { x: 1, y: 3, z: -2 },
+]) {
+  const origin = { x: 0, y: 2, z: 0 };
+  const ball = flightWorld.createRigidBody(
+    RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 2, 0),
+  );
+  flightWorld.createCollider(
+    RAPIER.ColliderDesc.ball(0.0635).setMass(0.065),
+    ball,
+  );
+  ball.setLinvel(velocity, true);
+  for (let i = 0; i < 96; i++) {
+    const d = P.dragDelta(ball.linvel(), 1 / 120),
+      m = ball.mass();
+    ball.applyImpulse({ x: d.x * m, y: d.y * m, z: d.z * m }, true);
+    flightWorld.step();
+  }
+  const prediction = P.flightAt(origin, velocity, 0.8),
+    actual = ball.translation();
+  assert(
+    Math.hypot(
+      actual.x - prediction.x,
+      actual.y - prediction.y,
+      actual.z - prediction.z,
+    ) < 0.04,
+    'guide and Rapier flight agree within 4 cm',
+  );
+  assert(
+    Math.abs(actual.x) < Math.abs(velocity.x * 0.8),
+    'air resistance reduces horizontal travel',
+  );
+  flightWorld.removeRigidBody(ball);
+}
+flightWorld.free();
+const straight = P.mecanumDemand(1, 0, 0, 0),
+  diagonal = P.mecanumDemand(1, 1, 0, 0),
+  turning = P.mecanumDemand(1, 0, 1, 0);
+assert.equal(straight.x, 1);
+assert.equal(
+  diagonal.x + diagonal.z,
+  1,
+  'diagonal wheel commands fit motor speed limit',
+);
+assert(
+  turning.x < straight.x && turning.turn < 1,
+  'translation and rotation share motor capacity',
+);
+const rotationRobot = s.robot;
+s.options.assist = false;
+s.options.elevation = 55;
+rotationRobot.setLinvel({ x: 0, y: 0, z: 0 }, true);
+rotationRobot.setAngvel({ x: 0, y: 0, z: 0 }, true);
+const stillMuzzle = s.getLaunch().velocity;
+rotationRobot.setAngvel({ x: 0, y: 2, z: 0 }, true);
+const rotatingMuzzle = s.getLaunch().velocity;
+assert(
+  Math.abs(
+    Math.hypot(
+      rotatingMuzzle.x - stillMuzzle.x,
+      rotatingMuzzle.z - stillMuzzle.z,
+    ) - 0.46,
+  ) < 0.0001,
+  'rotating muzzle adds tangential velocity',
+);
 let frees = 0;
 const disposable = Object.create(Simulator.prototype);
 Object.assign(disposable, {

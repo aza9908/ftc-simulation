@@ -1212,3 +1212,220 @@ kbd {
     font-size: 11px;
   }
 }
+
+/* Broadcast-style strip stays below the playable field, never over the goals. */
+.field-column {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #181d26;
+}
+.field-column .arena {
+  flex: 1;
+  min-height: 440px;
+}
+.match-board {
+  color: white;
+  flex: none;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.match-board-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 18px;
+  background: #272435;
+  font-size: 12px;
+  letter-spacing: 0.09em;
+}
+.match-board-title b {
+  font-size: 14px;
+}
+.match-board-scores {
+  display: grid;
+  grid-template-columns: 1fr 130px 1fr;
+}
+.blue-alliance {
+  background: #0864d9;
+  color: white;
+}
+.red-alliance {
+  background: #cf2036;
+  color: white;
+}
+.alliance-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 22px;
+  gap: 10px;
+}
+.alliance-score span {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+.alliance-score strong {
+  font-size: clamp(30px, 3.3vw, 46px);
+  line-height: 1.15;
+}
+.match-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f5f4ee;
+  color: #171922;
+  padding: 5px;
+}
+.match-timer strong {
+  font-size: 32px;
+  line-height: 1.1;
+  font-weight: 800;
+}
+.match-timer span {
+  font-size: 12px;
+  font-weight: 700;
+}
+.match-timer.closing-seconds {
+  background: #ffe62d;
+}
+.match-board-meta {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 5px 12px;
+  background: #262d38;
+  font-size: 12px;
+}
+.board-motif {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.board-motif .ball {
+  width: 14px;
+  height: 14px;
+}
+.match-results {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(94%, 560px);
+  max-height: 94%;
+  overflow: auto;
+  background: #f4f4f0;
+  color: #171922;
+  box-shadow: 0 15px 60px #0008;
+  border: 1px solid #566170;
+}
+.match-results header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #292435;
+  color: white;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+.winner-banner {
+  background: #ffe72d;
+  color: #111;
+  padding: 8px 14px;
+  font-size: 20px;
+}
+.results-totals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  text-align: center;
+}
+.results-totals > div {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.results-totals span {
+  font-size: 16px;
+  font-weight: 700;
+}
+.results-totals strong {
+  font-size: 48px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.match-results table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.match-results caption {
+  padding: 8px;
+  font-weight: 700;
+  background: #e0e0dc;
+}
+.match-results th,
+.match-results td {
+  padding: 8px 10px;
+}
+.match-results tbody tr:nth-child(odd) {
+  background: #e5e5e0;
+}
+.match-results td {
+  font-size: 20px;
+  font-weight: 700;
+}
+.match-results footer {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.match-results footer p {
+  font-size: 12px;
+  max-width: 270px;
+  margin: 0;
+}
+.match-results .primary {
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .field-column .arena {
+    height: 65dvh;
+    min-height: 440px;
+    flex: none;
+  }
+  .match-board-scores {
+    grid-template-columns: 1fr 100px 1fr;
+  }
+  .alliance-score {
+    padding: 8px 12px;
+  }
+  .alliance-score span {
+    font-size: 12px;
+  }
+  .match-board-title {
+    padding: 6px 12px;
+  }
+  .match-board-meta {
+    gap: 5px;
+  }
+  .match-results th,
+  .match-results td {
+    padding: 5px 8px;
+  }
+  .results-totals strong {
+    font-size: 36px;
+  }
+}

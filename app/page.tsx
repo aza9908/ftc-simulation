@@ -16,6 +16,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import type { Simulator, Snapshot } from './simulator';
+import { MatchScoreboard, MatchResults } from './match-scoreboard';
 const initial: Snapshot = {
   ready: false,
   score: 0,
@@ -113,166 +114,178 @@ export default function Home() {
         </button>
       </header>
       <div className="workspace">
-        <section className="arena">
-          <div
-            ref={mount}
-            className="canvas-mount"
-            aria-label="Interactive 3D FTC DECODE field"
-          />
-          <div className="arena-top">
-            <div className="session-label">
-              <span className="status-dot" />{' '}
-              {timed ? s.phase || 'AUTO' : 'FREE DRIVE'}{' '}
-              <span className="small-separator">/</span> BLUE ALLIANCE
-            </div>
-            <div className="view-picker">
-              {['Field', 'Follow', 'Top'].map((v) => (
-                <button
-                  key={v}
-                  className={view === v ? 'selected' : ''}
-                  onClick={() => {
-                    setView(v);
-                    sim.current?.configure({ view: v });
-                  }}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {!s.ready && (
-            <div className="loading-message" role="status">
-              {s.message}
-            </div>
-          )}
-          {s.ready && !s.running && (
-            <div className="start-overlay">
-              <div className="eyebrow">
-                {s.ended ? 'SESSION COMPLETE' : 'YOUR DRIVER STATION'}
+        <div className="field-column">
+          <section className="arena">
+            <div
+              ref={mount}
+              className="canvas-mount"
+              aria-label="Interactive 3D FTC DECODE field"
+            />
+            <div className="arena-top">
+              <div className="session-label">
+                <span className="status-dot" />{' '}
+                {timed ? s.phase || 'AUTO' : 'FREE DRIVE'}{' '}
+                <span className="small-separator">/</span> BLUE ALLIANCE
               </div>
-              <h2>
-                {s.ended
-                  ? `${s.score} points. One more run?`
-                  : 'Take the controls.'}
-              </h2>
-              <p>
-                {s.ended
-                  ? `${s.classified} classified · ${s.overflow} overflow · ${s.pattern} pattern points`
-                  : 'Collect. Aim. Launch. Open the gate and go again.'}
-              </p>
-              <button
-                className="primary"
-                onClick={() => {
-                  if (s.ended) sim.current?.reset();
+              <div className="view-picker">
+                {['Field', 'Follow', 'Top'].map((v) => (
+                  <button
+                    key={v}
+                    className={view === v ? 'selected' : ''}
+                    onClick={() => {
+                      setView(v);
+                      sim.current?.configure({ view: v });
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {!s.ready && (
+              <div className="loading-message" role="status">
+                {s.message}
+              </div>
+            )}
+            {s.ready && s.ended && (
+              <MatchResults
+                s={s}
+                onRestart={() => {
+                  sim.current?.reset();
                   start();
                 }}
+              />
+            )}
+            {s.ready && !s.running && !s.ended && (
+              <div className="start-overlay">
+                <div className="eyebrow">
+                  {s.ended ? 'SESSION COMPLETE' : 'YOUR DRIVER STATION'}
+                </div>
+                <h2>
+                  {s.ended
+                    ? `${s.score} points. One more run?`
+                    : 'Take the controls.'}
+                </h2>
+                <p>
+                  {s.ended
+                    ? `${s.classified} classified · ${s.overflow} overflow · ${s.pattern} pattern points`
+                    : 'Collect. Aim. Launch. Open the gate and go again.'}
+                </p>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    if (s.ended) sim.current?.reset();
+                    start();
+                  }}
+                >
+                  <Play size={17} fill="currentColor" />
+                  {s.ended ? 'Drive again' : 'Start driving'}
+                  <kbd>Enter</kbd>
+                </button>
+              </div>
+            )}
+            <div className="field-caption">
+              <span>DECODE</span>
+              <small>12 × 12 FT FIELD</small>
+            </div>
+            {s.running && (
+              <div
+                className={
+                  'interaction-prompt ' + (s.nearGate ? 'available' : '')
+                }
               >
-                <Play size={17} fill="currentColor" />
-                {s.ended ? 'Drive again' : 'Start driving'}
-                <kbd>Enter</kbd>
-              </button>
+                <kbd>F</kbd>
+                <span>{s.gatePrompt || 'Blue gate is on the left'}</span>
+              </div>
+            )}
+            <div className="arena-bottom">
+              <div className="telemetry">
+                <span className="status-dot" />
+                <span>
+                  {s.speed.toFixed(2)} <small>m/s</small>
+                </span>
+                <span className="telemetry-divider" />
+                <span>{s.inZone ? 'LAUNCH ZONE' : 'COLLECTION ZONE'}</span>
+              </div>
+              <div className="camera-buttons">
+                <button
+                  className="icon-button"
+                  aria-label={sound ? 'Mute sounds' : 'Enable sounds'}
+                  onClick={() => {
+                    setSound(!sound);
+                    sim.current?.configure({ sound: !sound });
+                  }}
+                >
+                  {sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label="Full screen"
+                  onClick={() => {
+                    if (document.fullscreenElement) document.exitFullscreen();
+                    else
+                      document.documentElement
+                        .requestFullscreen()
+                        .catch(() => {});
+                  }}
+                >
+                  <Maximize size={18} />
+                </button>
+              </div>
             </div>
-          )}
-          <div className="field-caption">
-            <span>DECODE</span>
-            <small>12 × 12 FT FIELD</small>
-          </div>
-          {s.running && (
-            <div
-              className={
-                'interaction-prompt ' + (s.nearGate ? 'available' : '')
-              }
-            >
-              <kbd>F</kbd>
-              <span>{s.gatePrompt || 'Blue gate is on the left'}</span>
-            </div>
-          )}
-          <div className="arena-bottom">
-            <div className="telemetry">
-              <span className="status-dot" />
-              <span>
-                {s.speed.toFixed(2)} <small>m/s</small>
-              </span>
-              <span className="telemetry-divider" />
-              <span>{s.inZone ? 'LAUNCH ZONE' : 'COLLECTION ZONE'}</span>
-            </div>
-            <div className="camera-buttons">
+            <div className="touch-controls">
               <button
-                className="icon-button"
-                aria-label={sound ? 'Mute sounds' : 'Enable sounds'}
-                onClick={() => {
-                  setSound(!sound);
-                  sim.current?.configure({ sound: !sound });
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  sim.current?.press('KeyW', true);
                 }}
+                onPointerUp={() => sim.current?.press('KeyW', false)}
+                onPointerCancel={() => sim.current?.press('KeyW', false)}
               >
-                {sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                ↑
               </button>
               <button
-                className="icon-button"
-                aria-label="Full screen"
-                onClick={() => {
-                  if (document.fullscreenElement) document.exitFullscreen();
-                  else
-                    document.documentElement
-                      .requestFullscreen()
-                      .catch(() => {});
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  sim.current?.press('KeyA', true);
                 }}
+                onPointerUp={() => sim.current?.press('KeyA', false)}
+                onPointerCancel={() => sim.current?.press('KeyA', false)}
               >
-                <Maximize size={18} />
+                ←
               </button>
+              <button
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  sim.current?.press('KeyS', true);
+                }}
+                onPointerUp={() => sim.current?.press('KeyS', false)}
+                onPointerCancel={() => sim.current?.press('KeyS', false)}
+              >
+                ↓
+              </button>
+              <button
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  sim.current?.press('KeyD', true);
+                }}
+                onPointerUp={() => sim.current?.press('KeyD', false)}
+                onPointerCancel={() => sim.current?.press('KeyD', false)}
+              >
+                →
+              </button>
+              <button
+                onClick={() => sim.current?.toggleIntake()}
+                aria-pressed={!!s.intake}
+              >
+                Intake
+              </button>
+              <button onClick={() => sim.current?.shoot()}>Shoot</button>
             </div>
-          </div>
-          <div className="touch-controls">
-            <button
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                sim.current?.press('KeyW', true);
-              }}
-              onPointerUp={() => sim.current?.press('KeyW', false)}
-              onPointerCancel={() => sim.current?.press('KeyW', false)}
-            >
-              ↑
-            </button>
-            <button
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                sim.current?.press('KeyA', true);
-              }}
-              onPointerUp={() => sim.current?.press('KeyA', false)}
-              onPointerCancel={() => sim.current?.press('KeyA', false)}
-            >
-              ←
-            </button>
-            <button
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                sim.current?.press('KeyS', true);
-              }}
-              onPointerUp={() => sim.current?.press('KeyS', false)}
-              onPointerCancel={() => sim.current?.press('KeyS', false)}
-            >
-              ↓
-            </button>
-            <button
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                sim.current?.press('KeyD', true);
-              }}
-              onPointerUp={() => sim.current?.press('KeyD', false)}
-              onPointerCancel={() => sim.current?.press('KeyD', false)}
-            >
-              →
-            </button>
-            <button
-              onClick={() => sim.current?.toggleIntake()}
-              aria-pressed={!!s.intake}
-            >
-              Intake
-            </button>
-            <button onClick={() => sim.current?.shoot()}>Shoot</button>
-          </div>
-        </section>
+          </section>
+          <MatchScoreboard s={s} timed={timed} />
+        </div>
         <aside className="driver-panel">
           <div className="panel-heading">
             <span>DRIVER STATION</span>
@@ -283,43 +296,6 @@ export default function Home() {
             <div>
               <h2>Blue Mecanum</h2>
               <p>Holonomic drive · 3-artifact intake</p>
-            </div>
-          </div>
-          <div className="session-summary">
-            <div className="alliance">
-              <span className="blue-mark" />
-              BLUE <strong>{s.score.toString().padStart(2, '0')}</strong>
-            </div>
-            <div className="clock">
-              <span>{timed ? s.phase : 'PRACTICE'}</span>
-              <strong>
-                {timed
-                  ? `${Math.floor(Math.ceil(s.time) / 60)}:${(
-                      Math.ceil(s.time) % 60
-                    )
-                      .toString()
-                      .padStart(2, '0')}`
-                  : '∞'}
-              </strong>
-              <small>
-                {s.ended
-                  ? 'SESSION COMPLETE'
-                  : s.running
-                    ? 'IN PROGRESS'
-                    : 'READY TO DRIVE'}
-              </small>
-            </div>
-            <div className="motif">
-              <span>{timed ? 'RED' : 'MOTIF'}</span>
-              {timed ? (
-                <strong className="red-score">{s.redScore || 0}</strong>
-              ) : (
-                <div>
-                  {(s.motif || 'GPP').split('').map((c, i) => (
-                    <i key={i} className={'ball ' + c} />
-                  ))}
-                </div>
-              )}
             </div>
           </div>
           <section className="panel-section">

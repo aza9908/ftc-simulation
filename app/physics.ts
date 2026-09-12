@@ -22,13 +22,21 @@ export function launchVelocity(
   start: { x: number; y: number; z: number },
   target: { x: number; y: number; z: number },
 ) {
-  let distance = Math.hypot(target.x - start.x, target.z - start.z),
-    t = Math.max(0.65, Math.min(1.05, distance / 3.2));
-  return {
+  const distance = Math.hypot(target.x - start.x, target.z - start.z);
+  const t = Math.max(0.65, Math.min(1.05, distance / 3.2));
+  const velocity = {
     x: (target.x - start.x) / t,
     y: (target.y - start.y + 4.905 * t * t) / t,
     z: (target.z - start.z) / t,
   };
+  // Iteratively correct the launch against the same drag model used by Rapier.
+  for (let i = 0; i < 10; i++) {
+    const end = flightAt(start, velocity, t);
+    velocity.x += (target.x - end.x) / t;
+    velocity.y += (target.y - end.y) / t;
+    velocity.z += (target.z - end.z) / t;
+  }
+  return velocity;
 }
 export function inLaunchZone(x: number, z: number) {
   return z <= -Math.abs(x) + 0.23 || z >= 1.2192 + Math.abs(x) - 0.23;
@@ -90,12 +98,21 @@ export function shotRange(
   startHeight = 0.38,
   targetHeight = 0.985,
 ) {
-  const a = (elevation * Math.PI) / 180,
-    vy = speed * Math.sin(a),
-    disc = vy * vy - 2 * 9.81 * (targetHeight - startHeight);
-  return disc < 0
-    ? null
-    : (speed * Math.cos(a) * (vy + Math.sqrt(disc))) / 9.81;
+  const angle = (elevation * Math.PI) / 180;
+  let p = { x: 0, y: startHeight, z: 0 };
+  let v = { x: speed * Math.cos(angle), y: speed * Math.sin(angle), z: 0 };
+  for (let i = 0; i < 720; i++) {
+    const previous = p;
+    const next = flightStep(p, v, 1 / 120);
+    p = next.position;
+    v = next.velocity;
+    if (v.y < 0 && previous.y >= targetHeight && p.y <= targetHeight) {
+      const alpha = (previous.y - targetHeight) / (previous.y - p.y);
+      return previous.x + (p.x - previous.x) * alpha;
+    }
+    if (p.y < 0) break;
+  }
+  return null;
 }
 /** Editing a control must not swallow unrelated game keys such as F or WASD. */
 export function controlOwnsKey(
@@ -119,4 +136,49 @@ export function controlOwnsKey(
       'PageDown',
     ].includes(code)
   );
+}
+
+export type Vector = { x: number; y: number; z: number };
+// Approximate foam-ball aerodynamic coefficient: rho=1.225 kg/m³, Cd=0.47,
+// diameter=0.127 m, mass=0.065 kg. Requires calibration against a real artifact.
+export const BALL_DRAG = (0.5 * 1.225 * 0.47 * Math.PI * 0.0635 ** 2) / 0.065;
+export function dragDelta(v: Vector, dt: number) {
+  const factor = 1 / (1 + BALL_DRAG * Math.hypot(v.x, v.y, v.z) * dt) - 1;
+  return { x: v.x * factor, y: v.y * factor, z: v.z * factor };
+}
+export function flightStep(p: Vector, v: Vector, dt: number) {
+  const d = dragDelta(v, dt);
+  const velocity = { x: v.x + d.x, y: v.y + d.y - 9.81 * dt, z: v.z + d.z };
+  return {
+    velocity,
+    position: {
+      x: p.x + velocity.x * dt,
+      y: p.y + velocity.y * dt,
+      z: p.z + velocity.z * dt,
+    },
+  };
+}
+export function flightAt(start: Vector, velocity: Vector, time: number) {
+  let p = { ...start },
+    v = { ...velocity };
+  const steps = Math.max(1, Math.ceil(time * 120)),
+    dt = time / steps;
+  for (let i = 0; i < steps; i++) {
+    const next = flightStep(p, v, dt);
+    p = next.position;
+    v = next.velocity;
+  }
+  return p;
+}
+/** Wheel speed budget shared between forward, strafe and turning commands. */
+export function mecanumDemand(x: number, z: number, turn: number, yaw: number) {
+  const c = Math.cos(yaw),
+    s = Math.sin(yaw);
+  const lateral = x * c - z * s,
+    forward = x * s + z * c;
+  const scale = Math.max(
+    1,
+    Math.abs(lateral) + Math.abs(forward) + Math.abs(turn) * 0.35,
+  );
+  return { x: x / scale, z: z / scale, turn: turn / scale };
 }
