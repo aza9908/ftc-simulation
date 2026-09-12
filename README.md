@@ -1,52 +1,49 @@
-# DECODE simulator
+# DECODE manual simulator
 
-Unofficial FIRST Tech Challenge 2025–26 DECODE driver and four-robot match practice, based on the official TU32 manual and field illustrations. No claim of complete referee coverage or calibrated engineering accuracy.
+Unofficial FIRST Tech Challenge 2025–26 DECODE manual driving practice. Autonomous play, AI robot routines and the AUTO/transition phases have been removed. Choose a two-minute manual session or untimed manual practice; all driver controls are available immediately after Start driving.
 
-## Controls
+## Robots and players
 
-| Action | Keyboard | Standard PS5 mapping |
-|---|---|---|
-| Drive (field-relative; robot-relative in Follow) | WASD / arrows | Left stick |
-| Rotate | Q / E | Right stick X |
-| Toggle front intake | R | L1 |
-| Reverse intake | B (hold) | Circle (hold) |
-| Shoot | Space | R2 / Cross |
-| Push blue gate, on left | F (hold near lever) | Square (hold) |
-| Precision speed | Shift | L2 |
-| Change camera | C | Triangle |
-| Pause / start | Enter | Options |
-| Manual shot speed | − / + | D-pad left / right |
-| Manual shot elevation | [ / ] | D-pad down / up |
-| Human-player feed | H / Feed tray | On-screen button |
+Choose **Single player** or **Multiplayer · local** above the field. Player 1 can select Blue 1, Blue 2, Red 1 or Red 2. In multiplayer, Player 2 selects a different robot; cooperative same-alliance play and opposing-alliance play both work. Robot colors, labels, spawn positions, goal targeting, gate, loading tray and driver telemetry follow the selection. Changing robot, mode or session length resets the field.
 
-Intake starts OFF and accepts at most three artifacts. The roller applies a bounded capture force in its front mouth, and reverse physically ejects an artifact. A shot waits for flywheel spin-up. Aim assist compensates for chassis velocity. Manual shots inherit chassis translation and muzzle tangential velocity from robot rotation and support 3–11 m/s launch speed and 25–75° elevation, with an estimated range at goal height. The blue gate approach marker and distance prompt show where to hold F; F also works after focusing a settings switch. The broadcast scoreboard sits below the field, with blue/red totals, a central clock and motif. Final results show both alliances and a reconciled AUTO/TELEOP scoring breakdown. Physical PS5 hardware has not been tested; synthetic standard Gamepad API input is covered by tests.
+All four robots remain visible. Unselected robots have no driving, shooting or intake routine and remain parked unless moved by contact. Only selected robots receive preloads; unused artifacts remain in their alliance tray. All 36 artifacts are conserved.
 
-## Two local players
+Two-player mode runs on one computer, with separate keyboard controls, two standard controllers, or a controller plus the other player's keyboard controls. Online rooms are not implemented. The first observed controller drives Player 1; the second drives Player 2. Slots remain assigned if one disconnects, preventing controller takeover. Both players share launcher settings and the camera.
 
-Choose **2 players · local** above the field. Blue: WASD move, Q/E turn, R intake, Space shoot, F gate, B reverse, Left Shift precision. Red: arrows move, comma/period turn, I intake, slash shoot, O gate, U reverse, Right Shift precision. Both share the camera and launcher settings. In Follow view both input frames track the Blue camera; Field/Top keep field-relative movement.
+| Action | Player 1 | Player 2 | Standard PS5 mapping |
+|---|---|---|---|
+| Drive | WASD (arrows also in single player) | Arrow keys | Left stick |
+| Turn | Q / E | Comma / period | Right stick X |
+| Toggle intake | R | I | L1 |
+| Reverse intake | B hold | U hold | Circle hold |
+| Shoot | Space | Slash | R2 / Cross |
+| Push own alliance gate | F hold nearby | O hold nearby | Square hold |
+| Precision speed | Left Shift | Right Shift | L2 |
+| Change shared camera | C | On-screen picker | Triangle |
+| Pause / resume | Enter | On-screen button | Options |
+| Manual launch speed / elevation | −/+ and [/] | Shared settings | D-pad |
+| Human-player feed to Player 1 alliance | H / Feed tray | — | On-screen button |
 
-Two standard controllers use the same layout in the table. The first observed controller drives Blue; the second drives Red. Slots remain assigned if one disconnects, preventing controller takeover. One controller plus the other player's keyboard controls also works. Two-player mode is local only; there are no online rooms. All player inputs remain locked during AUTO and transition, except shared pause/camera controls.
+Field/Top views use field-relative movement. Follow view rotates both players' controls with Player 1's camera. Intake starts off, accepts at most three artifacts and applies force through the front roller. Flywheel spin-up, cooldown and launcher recoil are simulated. Physical PS5 hardware has not been tested; standard Gamepad API input is tested synthetically.
 
-## Match practice
+## Timer and scoring
 
-**Regulation match** is selected by default. The selector above the field switches between one player, two local players, and untimed free practice. One-player regulation matches add a blue partner and two red bots; two-player matches assign Blue to Player 1 and Red to Player 2, with one bot partner for each. Free practice has only the selected human players. All four robots have rigid-body colliders and motor forces. Match timing is 30 seconds of preset autonomous, 8 seconds of transition, and 120 seconds of teleop, matching the standard TU32 timing (Championship/Premier variants are not modeled). The phase clock and full sequence are visible below the field. The clock uses elapsed wall time independently of the capped rendering/physics catch-up, preserving time across phase boundaries. Pause and loss of window focus pause practice. Driver motion/intake/shooting are locked during autonomous and transition. The bots use basic collect, shoot, clear-gate, and return-to-base routines, not recorded match strategies.
+The optional manual timer starts at 2:00 and runs directly to zero. There is no autonomous or transition countdown. Wall-clock timing is independent of rendering speed; explicit pause or loss of window focus pauses practice. After zero, controls stop and physics settles before final scoring.
 
-Motif is randomized among GPP, PGP and PPG. Initial staging is 18 artifacts on spike marks (near GPP / middle PGP / far PPG, center out), 3 per loading zone, and 6 per alliance tray; robot preloads come from those trays. Match mode preloads all four robots with three, conserving 36 artifacts (24 purple, 12 green). Free drive retains the other artifacts in human-player trays. Out-of-field artifacts return to a tray; they are not recreated. Human-player feed requires the blue loading zone to be clear.
+The scoreboard shows blue/red totals, time, magazine, motif and selected robot's ramp. Final results show manual artifact, pattern and return-to-base points. Classified/overflow artifacts score 3/1, motif positions score 2, and approximate base scoring is included for the human-controlled robots. This manual session is not a complete official match format. Depot points, ranking points and most referee fouls are not implemented.
 
-Blue goal/gate are on the audience's left; blue loading/base are on the right. Opening the blue gate returns artifacts into the red side's lane. Classified/overflow scores are 3/1. Pattern positions score 2 after autonomous and at the end of teleop; leave and approximate base scoring are included. Physics continues after the buzzer until settling, with a 15-second cap.
+## Physics and limits
 
-## Physics and remaining approximations
+Three.js rendering and Rapier rigid-body dynamics at 120 Hz, SI units, gravity 9.81 m/s², continuous collision detection, bounded motor forces, friction, restitution and recoil. Mecanum translation and turning share a wheel-speed budget. Manual shots inherit chassis and muzzle tangential velocity; aim assist compensates platform motion. The trajectory guide, range estimate and assisted launch use the same quadratic-drag flight model.
 
-Three.js rendering with shadows, materials and modeled robot parts. Rapier rigid-body dynamics at a fixed 120 Hz, SI units, gravity 9.81 m/s², continuous collision detection, traction-capped motor forces, friction, rolling, restitution, and launcher recoil. Dynamic balls physically roll along inclined classifier ramps with 148 mm clear lanes for 127 mm balls. A narrow pivoting gate arm replaces the old flap. Its lower contact point moves approximately 51 mm horizontally and drops to approximately 76 mm above the floor while the upper retaining bar lifts clear, based on manual Figure 9-16. It closes under a damped gravity approximation; all nine balls are covered by the release test. Driving uses timestep-aware motor response, acceleration and braking limits, and a shared mecanum wheel-speed budget for translation and turning. Air resistance uses quadratic sphere drag; the aiming guide, range estimate and assisted launcher solve the same flight model. Recoil uses the relative exit momentum at the muzzle. Gate motion uses a damped gravity-linkage approximation requiring nearby actuation.
+Ramps have 148 mm clear lanes for nominal 127 mm balls. The gate is a pivoting push arm: its contact point moves approximately 51 mm horizontally and drops to approximately 76 mm above the floor, based on Figure 9-16. The upper bar clears the ball lane and gravity returns the gate. Both the linkage and field geometry are hand-modeled approximations, not official CAD.
 
-Goal-to-square routing remains scripted after a valid top-entry sensor. Geometry is a hand-modeled approximation, not official CAD. Motor force, mass, friction, restitution and damping have not been calibrated against hardware. Air density 1.225 kg/m³ and constant Cd 0.47 are modeling assumptions; perforation, Reynolds-number changes, wind and Magnus lift are not modeled. Drag equation reference: https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/drag-equation/. Robot roll/pitch is constrained. Base/leave geometry is approximate. Depot points, ranking points, most interaction fouls, advanced autonomous programming, robot customization and network multiplayer are not implemented. The supplied YouTube video could not be loaded for frame-by-frame comparison; the authoritative field illustrations were inspected instead.
+Goal-to-ramp routing is scripted after a valid top entry. Robot roll/pitch is constrained. Mass, traction, friction, damping, restitution and aerodynamic parameters are not calibrated against hardware. Constant drag coefficient 0.47 and air density 1.225 kg/m³ are assumptions; perforations, wind, Magnus lift and Reynolds-number variation are omitted.
 
-Official source: https://ftc-resources.firstinspires.org/ftc/archive/2026/game/cm-html/DECODE_Competition_Manual_TU32.htm (sections 9–11).
+Sources: [FIRST TU32 manual and field diagrams](https://ftc-resources.firstinspires.org/ftc/archive/2026/game/cm-html/DECODE_Competition_Manual_TU32.htm), [NASA drag equation](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/drag-equation/).
 
-## Run and checks
+## Development and verification
 
 `npm install`, `npm run dev`, `npm test`, `npm run build`.
 
-Tests exercise the same field construction and physics stepping used in the game: counts and staging, spin-up and valid goal entry, single-ball and full nine-ball gate release/gravity return, keyboard focus handling, manual shot range and inherited velocity, timestep consistency, Rapier-versus-guide flight within 4 cm across three test velocities, shared wheel-speed limits, rotating-muzzle velocity and final-score reconciliation, intake off/on and reverse, wall collisions, launch guards, motif/base scoring, four robots, full match phases including the 120-second teleop, post-buzzer settling, conservation of artifacts, and synthetic controller movement/toggle/pause, independent two-player input, disconnect slot stability, red-player goal scoring and gate actuation, gate travel/contact height, and wall-time phase overshoot.
-
-TypeScript and production build are checked separately. Visual browser QA and real gamepad testing have not been performed. Optional WebMCP tools remain feature-detected; no supported WebMCP validation context was available.
+Tests cover all four robot selections and alliance goals/gates, same-alliance multiplayer, immediate manual controls, parked robots, timed settling, final-score reconciliation, ball conservation, nine-ball gate release, intake/reverse, collisions, drag prediction, recoil-related muzzle velocity and two-controller isolation/disconnection. TypeScript and production builds are checked separately. Visual browser QA and real controller hardware testing have not been performed.

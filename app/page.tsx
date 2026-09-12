@@ -26,8 +26,8 @@ const initial: Snapshot = {
   magazine: ['P', 'G', 'P'],
   ramp: [],
   speed: 0,
-  time: 30,
-  phase: 'AUTO',
+  time: 120,
+  phase: 'MANUAL',
   running: false,
   gate: 0,
   nearGate: false,
@@ -49,7 +49,9 @@ export default function Home() {
     [sound, setSound] = useState(true),
     [help, setHelp] = useState(false),
     [timed, setTimed] = useState(true),
-    [players, setPlayers] = useState<1 | 2>(1);
+    [players, setPlayers] = useState<1 | 2>(1),
+    [robot1, setRobot1] = useState(0),
+    [robot2, setRobot2] = useState(2);
   useEffect(() => {
     let dead = false;
     let owned: Simulator | null = null;
@@ -60,6 +62,8 @@ export default function Home() {
         const engine = await Simulator.create(host, (v) => {
           if (!dead) {
             setS(v);
+            if (v.robot1 !== undefined) setRobot1(v.robot1);
+            if (v.robot2 !== undefined) setRobot2(v.robot2);
             if (v.view) setView(v.view);
             if (v.power !== undefined) setPower(v.power);
             if (v.elevation !== undefined) setElevation(v.elevation);
@@ -85,6 +89,15 @@ export default function Home() {
     };
   }, []);
   const start = () => sim.current?.toggle();
+  const robotNames = ['Blue 1', 'Blue 2', 'Red 1', 'Red 2'];
+  const chooseRobot = (player: 1 | 2, id: number) => {
+    const r1 = player === 1 ? id : robot1;
+    const r2 = player === 2 ? id : robot2 === r1 ? (r1 + 1) % 4 : robot2;
+    setRobot1(r1);
+    setRobot2(r2);
+    sim.current?.configure({ robot1: r1, robot2: r2 });
+    sim.current?.reset();
+  };
   return (
     <main className="sim-app">
       <header className="topbar">
@@ -136,7 +149,7 @@ export default function Home() {
                       sim.current?.reset();
                     }}
                   />
-                  {count === 1 ? '1 player' : '2 players · local'}
+                  {count === 1 ? 'Single player' : 'Multiplayer · local'}
                 </label>
               ))}
             </fieldset>
@@ -157,10 +170,45 @@ export default function Home() {
                       sim.current?.reset();
                     }}
                   />
-                  {match ? 'Regulation match' : 'Free practice'}
+                  {match ? '2-minute manual' : 'Untimed manual'}
                 </label>
               ))}
             </fieldset>
+          </div>
+          <div className="robot-selection">
+            {([1, ...(players === 2 ? [2] : [])] as (1 | 2)[]).map((player) => (
+              <fieldset key={player}>
+                <legend>
+                  {players === 2
+                    ? `Player ${player} robot`
+                    : 'Choose your robot'}
+                </legend>
+                <div className="robot-choices">
+                  {robotNames.map((name, id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={(player === 1 ? robot1 : robot2) === id}
+                      disabled={player === 2 && id === robot1}
+                      className={
+                        (id < 2 ? 'blue-choice' : 'red-choice') +
+                        ((player === 1 ? robot1 : robot2) === id
+                          ? ' selected'
+                          : '')
+                      }
+                      onClick={() => chooseRobot(player, id)}
+                    >
+                      <b>{(id % 2) + 1}</b>
+                      <span>{name}</span>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
+            <p>
+              Changing robot or mode resets the field. Unselected robots stay
+              parked.
+            </p>
           </div>
           <section className="arena">
             <div
@@ -171,8 +219,9 @@ export default function Home() {
             <div className="arena-top">
               <div className="session-label">
                 <span className="status-dot" />{' '}
-                {timed ? s.phase || 'AUTO' : 'FREE DRIVE'}{' '}
-                <span className="small-separator">/</span> BLUE ALLIANCE
+                {timed ? s.phase || 'MANUAL' : 'UNTIMED'}{' '}
+                <span className="small-separator">/</span>{' '}
+                {robotNames[robot1].toUpperCase()}
               </div>
               <div className="view-picker">
                 {['Field', 'Follow', 'Top'].map((v) => (
@@ -190,18 +239,6 @@ export default function Home() {
               </div>
             </div>
 
-            {timed &&
-              s.running &&
-              (s.phase === 'AUTO' || s.phase === 'TRANSITION') && (
-                <div className="phase-notice">
-                  <b>{s.phase === 'AUTO' ? 'AUTONOMOUS' : 'TRANSITION'}</b>
-                  <span>
-                    {s.phase === 'AUTO'
-                      ? 'Robots run their preset routine. Driver control starts at TELEOP.'
-                      : 'Scoring pause. TELEOP starts when this countdown reaches zero.'}
-                  </span>
-                </div>
-              )}
             {!s.ready && (
               <div className="loading-message" role="status">
                 {s.message}
@@ -225,14 +262,14 @@ export default function Home() {
                   {s.ended
                     ? `${s.score} points. One more run?`
                     : timed
-                      ? 'Ready for the match?'
+                      ? 'Ready to drive?'
                       : 'Take the controls.'}
                 </h2>
                 <p>
                   {s.ended
                     ? `${s.classified} classified · ${s.overflow} overflow · ${s.pattern} pattern points`
                     : timed
-                      ? '30 seconds AUTO · 8 seconds transition · 2 minutes TELEOP.'
+                      ? 'Two minutes of manual driving. Controls are active from the start.'
                       : 'Collect. Aim. Launch. Open the gate and go again.'}
                 </p>
                 <button
@@ -246,7 +283,7 @@ export default function Home() {
                   {s.started
                     ? 'Resume'
                     : timed
-                      ? 'Start match'
+                      ? 'Start driving'
                       : 'Start driving'}
                   <kbd>Enter</kbd>
                 </button>
@@ -263,7 +300,10 @@ export default function Home() {
                 }
               >
                 <kbd>F</kbd>
-                <span>{s.gatePrompt || 'Blue gate is on the left'}</span>
+                <span>
+                  {s.gatePrompt ||
+                    `${robot1 < 2 ? 'Blue' : 'Red'} gate is on the ${robot1 < 2 ? 'left' : 'right'}`}
+                </span>
               </div>
             )}
             <div className="arena-bottom">
@@ -358,10 +398,14 @@ export default function Home() {
             <span>DRIVER STATION</span>
             <span className="live-badge">● LIVE</span>
           </div>
-          <div className="robot-title">
-            <div className="robot-number">01</div>
+          <div className={'robot-title ' + (robot1 >= 2 ? 'red-driver' : '')}>
+            <div className="robot-number">{(robot1 % 2) + 1}</div>
             <div>
-              <h2>{players === 2 ? 'Player 1 · Blue' : 'Blue Mecanum'}</h2>
+              <h2>
+                {players === 2
+                  ? `Player 1 · ${robotNames[robot1]}`
+                  : robotNames[robot1]}
+              </h2>
               <p>Holonomic drive · 3-artifact intake</p>
             </div>
           </div>
@@ -388,7 +432,7 @@ export default function Home() {
             <button
               className={'intake-button ' + (s.intake ? 'active' : '')}
               aria-pressed={!!s.intake}
-              disabled={!s.running || (timed && s.phase !== 'TELEOP')}
+              disabled={!s.running || (timed && s.phase !== 'MANUAL')}
               onClick={() => sim.current?.toggleIntake()}
             >
               {s.intake ? 'Intake running' : 'Start intake'} <kbd>R / L1</kbd>
@@ -400,7 +444,7 @@ export default function Home() {
               disabled={
                 !s.running ||
                 !s.magazine.length ||
-                (timed && s.phase !== 'TELEOP')
+                (timed && s.phase !== 'MANUAL')
               }
               onClick={() => sim.current?.reverseIntake()}
             >
@@ -408,7 +452,7 @@ export default function Home() {
             </button>
             <button
               disabled={
-                !s.running || !s.reserve || (timed && s.phase !== 'TELEOP')
+                !s.running || !s.reserve || (timed && s.phase !== 'MANUAL')
               }
               onClick={() => sim.current?.loadArtifact()}
             >
@@ -433,7 +477,7 @@ export default function Home() {
             </div>
             <div className="power-label">
               <label id="power-label">Launch speed</label>
-              <span>{assist ? 'AUTO' : `${power.toFixed(1)} m/s`}</span>
+              <span>{assist ? 'ASSISTED' : `${power.toFixed(1)} m/s`}</span>
             </div>
             <Slider
               aria-labelledby="power-label"
@@ -450,7 +494,7 @@ export default function Home() {
             />
             <div className="power-label">
               <label id="elevation-label">Shot elevation</label>
-              <span>{assist ? 'AUTO' : `${elevation}°`}</span>
+              <span>{assist ? 'ASSISTED' : `${elevation}°`}</span>
             </div>
             <Slider
               aria-labelledby="elevation-label"
@@ -488,7 +532,7 @@ export default function Home() {
               disabled={
                 !s.running ||
                 !s.magazine.length ||
-                (timed && s.phase !== 'TELEOP')
+                (timed && s.phase !== 'MANUAL')
               }
               onClick={() => sim.current?.shoot()}
             >
@@ -525,7 +569,7 @@ export default function Home() {
                 ◈ Gate {s.gate > 0.3 ? 'open' : 'closed'}
               </span>
               <button
-                disabled={!s.running || (timed && s.phase !== 'TELEOP')}
+                disabled={!s.running || (timed && s.phase !== 'MANUAL')}
                 onPointerDown={(e) => {
                   e.currentTarget.setPointerCapture(e.pointerId);
                   sim.current?.press('KeyF', true);
@@ -553,7 +597,7 @@ export default function Home() {
             <p className="hint">
               {s.nearGate
                 ? 'In reach. Hold F / Square until the ramp is empty.'
-                : 'Approach the glowing blue circle on the left, then hold F / Square.'}
+                : `Approach your ${robot1 < 2 ? 'blue gate on the left' : 'red gate on the right'}, then hold F / Square.`}
             </p>
           </section>
           <section className="session-stats">
@@ -574,9 +618,11 @@ export default function Home() {
             </div>
           </section>
           {players === 2 && (
-            <section className="second-driver">
+            <section
+              className={'second-driver ' + (robot2 < 2 ? 'second-blue' : '')}
+            >
               <div className="section-title">
-                <h3>Player 2 · Red</h3>
+                <h3>Player 2 · {robotNames[robot2]}</h3>
                 <span>{s.player2?.controller || 'Keyboard'}</span>
               </div>
               <div className="second-stats">
@@ -613,16 +659,16 @@ export default function Home() {
               </div>
               <small>
                 {s.player2?.nearGate
-                  ? 'Hold O / Square to push the red gate.'
-                  : 'Red goal and gate are on the right.'}
+                  ? 'Hold O / Square to push your gate.'
+                  : `${robot2 < 2 ? 'Blue' : 'Red'} goal and gate are on the ${robot2 < 2 ? 'left' : 'right'}.`}
               </small>
             </section>
           )}
           <div className="session-actions">
             <p className="hint">
               {timed
-                ? 'Regulation timing: 0:30 AUTO → 0:08 transition → 2:00 TELEOP. Three practice bots fill the field in one-player mode; two bots in two-player mode.'
-                : 'Untimed practice. Switch to Regulation match above the field for the official timer.'}
+                ? 'Two-minute manual session. Drive immediately; the timer stops driving at zero.'
+                : 'Untimed manual practice. Drive as long as you like.'}
             </p>
             <div className="action-buttons">
               <button onClick={start} disabled={!s.ready || s.ended}>
@@ -691,9 +737,9 @@ export default function Home() {
             <p>
               Player 1: WASD, Q/E, R intake, Space shoot, F gate. Player 2:
               arrows, comma/period turn, I intake, slash shoot, O gate, U
-              reverse. Right Shift slows Player 2. Two controllers map to Blue
-              and Red in browser connection order; press a button on each to
-              connect. The same button layout applies to both.
+              reverse. Right Shift slows Player 2. Two controllers map to Player
+              1 and Player 2 in browser connection order; press a button on each
+              to connect. The same button layout applies to both.
             </p>
           )}
           <div className="control-guide">
@@ -727,10 +773,10 @@ export default function Home() {
             turning. Rapier rigid-body physics at 120 Hz; gravity, momentum,
             friction, bouncing, and continuous collision detection. Robot
             traction and gate linkage are approximated. Classifier routing is
-            scripted after goal entry. Match mode adds three practice bots,
-            preset autonomous, randomized motifs, and post-match settling. Bot
-            strategy, field geometry, and referee coverage remain
-            approximations; this is not an official match adjudicator.
+            scripted after goal entry. Choose any of four robots; all movement
+            is manual. Unselected robots remain parked. Field geometry and
+            referee coverage remain approximations; this is manual practice, not
+            a full official match.
           </p>
           <a
             href="https://ftc-resources.firstinspires.org/ftc/archive/2026/game/cm-html/DECODE_Competition_Manual_TU32.htm"

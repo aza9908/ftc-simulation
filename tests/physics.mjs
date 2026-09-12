@@ -118,22 +118,33 @@ assert.equal(P.patternPoints(['P', 'P', 'G'], 'PPG'), 6);
 assert.equal(P.basePoints(1.1, 1.49, 0), 10);
 assert.equal(P.basePoints(1.1, 1.49, Math.PI / 4), 5);
 assert.equal(P.basePoints(0, 0, 0), 0);
-// Four robots, real match phase durations, control lockout, and settling after buzzer.
+// Timed play starts immediately in manual control; nobody drives or shoots without input.
 s.options.timed = true;
 s.reset();
 assert.equal(s.bots.filter((b) => b.body.isEnabled()).length, 3);
-assert.equal(s.blueReserve.length + s.redReserve.length, 0);
-assert.equal(s.s.time, 30);
+assert.equal(s.s.time, 120);
+assert.equal(s.s.phase, 'MANUAL');
 s.s.running = true;
+const parked = s.bots.map((b) => ({ ...b.body.translation() }));
+step(900);
+assert.equal(s.s.shots, 0);
+assert.equal(s.s.score, 0);
+assert.equal(s.s.redScore, 0);
+for (const [i, b] of s.bots.entries())
+  assert(
+    Math.hypot(
+      b.body.translation().x - parked[i].x,
+      b.body.translation().z - parked[i].z,
+    ) < 0.03,
+    'unselected robots do not drive',
+  );
 s.toggleIntake();
-assert.equal(s.s.intake, false, 'manual intake locked during AUTO');
-step(3601);
-assert.equal(s.s.phase, 'TRANSITION');
-step(960);
-assert.equal(s.s.phase, 'TELEOP');
-s.toggleIntake();
-assert.equal(s.s.intake, true);
-step(120 * 120 - 2);
+assert.equal(s.s.intake, true, 'intake available immediately');
+s.keys.add('KeyW');
+step(30);
+s.keys.clear();
+assert(s.robot.translation().z < 1.5, 'manual drive available immediately');
+step(120 * 120 - 932);
 assert(Number.isFinite(s.s.score) && Number.isFinite(s.s.redScore));
 assert.equal(s.balls.length, 36);
 s.s.time = 0.001;
@@ -153,7 +164,7 @@ assert.equal(
   s.s.redScore,
   'red results must reconcile',
 );
-assert(s.s.breakdown[0].autoArtifacts > 0, 'AUTO artifacts tracked separately');
+assert.equal(s.s.breakdown[0].autoArtifacts, 0, 'no autonomous points');
 assert.equal(s.balls.length, 36, 'no artifacts are created or lost');
 // A full, single-file ramp must remain blocked until the physically nearby gate opens.
 s.options.timed = false;
@@ -249,12 +260,12 @@ s.options.players = 1;
 s.reset();
 s.s.running = true;
 s.advanceMatch(30.25);
-assert.equal(s.s.phase, 'TRANSITION');
-assert.equal(s.s.time, 7.75);
+assert.equal(s.s.phase, 'MANUAL');
+assert.equal(s.s.time, 89.75);
 s.advanceMatch(8);
-assert.equal(s.s.phase, 'TELEOP');
-assert.equal(s.s.time, 119.75);
-s.advanceMatch(119.75);
+assert.equal(s.s.phase, 'MANUAL');
+assert.equal(s.s.time, 81.75);
+s.advanceMatch(81.75);
 assert.equal(s.s.phase, 'SETTLING');
 // Two local players: independent drive commands and no AI takeover in free play.
 Object.defineProperty(navigator, 'getGamepads', {
@@ -265,7 +276,7 @@ s.options.timed = false;
 s.options.players = 2;
 s.reset();
 s.s.running = true;
-assert.equal(s.bots.filter((b) => b.body.isEnabled()).length, 1);
+assert.equal(s.bots.filter((b) => b.body.isEnabled()).length, 3);
 assert.equal(s.bots[1].inventory.length, 3);
 const red = s.bots[1];
 s.robot.setTranslation({ x: 0.5, y: 0.14, z: 0.7 }, true);
@@ -282,12 +293,12 @@ assert.equal(s.s.intake, false);
 s.toggleSecondIntake();
 assert(s.secondIntake);
 assert.equal(s.s.intake, false);
-// Both players are locked during AUTO; the red preset routine still runs.
+// Both players have manual control immediately in timed mode.
 s.options.timed = true;
 s.reset();
 s.s.running = true;
 s.toggleSecondIntake();
-assert(!s.secondIntake);
+assert(s.secondIntake);
 s.options.timed = false;
 s.reset();
 s.s.running = true;
@@ -360,6 +371,54 @@ Object.defineProperty(navigator, 'getGamepads', {
 });
 s.options.players = 1;
 s.options.timed = false;
+s.reset();
+// Every selectable identity has the correct alliance, start location and goal target.
+for (const id of [0, 1, 2, 3]) {
+  s.configure({ robot1: id, players: 1, timed: false });
+  s.reset();
+  s.s.running = true;
+  assert.equal(s.playerSide, id < 2 ? 1 : -1);
+  assert(Math.abs(s.robot.translation().x - s.robotSpawn(id).x) < 0.0001);
+  assert.equal(s.inventory.length, 3);
+  assert.equal(s.balls.length, 36);
+  const targetX = -s.playerSide * 1.55;
+  assert(
+    Math.sign(s.getLaunch().velocity.x) ===
+      Math.sign(targetX - s.robot.translation().x),
+  );
+  s.keys.add('Space');
+  step(500);
+  s.keys.clear();
+  assert(
+    (id < 2 ? s.s.score : s.s.redScore) > 0,
+    `selected robot ${id} scores in its own alliance goal`,
+  );
+  s.robot.setTranslation({ x: -s.playerSide * 1.22, y: 0.14, z: 0.4 }, true);
+  s.robot.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  s.keys.add('KeyF');
+  step(150);
+  s.keys.clear();
+  assert(
+    s.gates.find((g) => g.side === -s.playerSide).angle > 0.5,
+    `selected robot ${id} opens its own gate`,
+  );
+}
+// Same-alliance multiplayer is supported and cannot select the same robot twice.
+s.configure({ players: 2, robot1: 1, robot2: 0, timed: false });
+s.reset();
+s.s.running = true;
+assert.equal(s.bots[1].side, 1);
+assert.equal(s.inventory.length + s.bots[1].inventory.length, 6);
+const p2 = s.bots[1];
+p2.body.setTranslation({ x: 0.42, y: 0.14, z: 1.62 }, true);
+s.keys.add('Slash');
+step(500);
+s.keys.clear();
+assert(s.s.score > 0, 'Player 2 can drive a blue robot');
+assert.equal(s.s.redScore, 0);
+s.configure({ robot1: 2, robot2: 2 });
+assert.notEqual(s.options.robot1, s.options.robot2);
+s.configure({ robot1: 0, robot2: 2, players: 1, timed: false });
 s.reset();
 // Compare the aiming model against Rapier flight, without any field collisions.
 const flightWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -454,5 +513,5 @@ disposable.dispose();
 assert.equal(frees, 1, 'dispose must be idempotent');
 s.world.free();
 console.log(
-  'PASS: staging, spin-up, goal scoring, gate/recycling, manual intake/reverse, collisions, motifs, base scoring, four robots, match phases, settling, conservation and controller mapping.',
+  'PASS: staging, spin-up, goal scoring, gate/recycling, manual intake/reverse, collisions, motifs, base scoring, four selectable robots, immediate manual control, parked robots, two-player input, settling, conservation and controller mapping.',
 );

@@ -14,7 +14,6 @@ import {
   shotRange,
   controlOwnsKey,
   basePoints,
-  overLaunchLine,
 } from './physics';
 export type ScoreDetail = {
   autoArtifacts: number;
@@ -25,6 +24,9 @@ export type ScoreDetail = {
   base: number;
 };
 export type Snapshot = {
+  robot1?: number;
+  robot2?: number;
+  alliance?: string;
   started?: boolean;
   players?: number;
   player2?: {
@@ -88,6 +90,8 @@ type Gate = {
   side: number;
 };
 type Options = {
+  robot1: number;
+  robot2: number;
   players: 1 | 2;
   elevation: number;
   assist: boolean;
@@ -125,6 +129,8 @@ export class Simulator {
     sound: true,
     timed: true,
     players: 1,
+    robot1: 0,
+    robot2: 2,
   };
   controllerSlots: number[] = [];
   secondIntake = false;
@@ -787,6 +793,61 @@ export class Simulator {
     this.balls.push(b);
     return b;
   }
+  get playerSide() {
+    return (this.options.robot1 ?? 0) < 2 ? 1 : -1;
+  }
+  get allianceName() {
+    return this.playerSide === 1 ? 'Blue' : 'Red';
+  }
+  get selectedRamp() {
+    return this.playerSide === 1 ? this.ramp : this.redRamp;
+  }
+  get selectedReserve() {
+    return this.playerSide === 1 ? this.blueReserve : this.redReserve;
+  }
+  robotSpawn(id: number) {
+    return [
+      { x: 0.42, y: 0.14, z: 1.62 },
+      { x: 1.1, y: 0.14, z: -1.2 },
+      { x: -0.42, y: 0.14, z: 1.62 },
+      { x: -1.1, y: 0.14, z: -1.2 },
+    ][id];
+  }
+  styleRobot(mesh: THREE.Group, id: number) {
+    mesh.traverse((o) => {
+      if (o instanceof THREE.Mesh && !o.userData.robotLabel) {
+        const material = o.material as THREE.MeshStandardMaterial;
+        if (
+          material.color &&
+          ['437ce3', 'd52e30'].includes(material.color.getHexString())
+        )
+          material.color.set(id < 2 ? '#437ce3' : '#d52e30');
+      }
+    });
+    const previous = mesh.getObjectByName('robot-id');
+    if (previous) {
+      mesh.remove(previous);
+      const m = previous as THREE.Mesh;
+      m.geometry.dispose();
+      const mat = m.material as THREE.MeshBasicMaterial;
+      mat.map?.dispose();
+      mat.dispose();
+    }
+    const label = this.label(
+      ['BLUE 1', 'BLUE 2', 'RED 1', 'RED 2'][id],
+      0,
+      0.43,
+      0,
+      0.4,
+      id < 2 ? '#b4d3ff' : '#ffb4be',
+      true,
+    );
+    if (label) {
+      label.name = 'robot-id';
+      label.userData.robotLabel = true;
+      mesh.add(label);
+    }
+  }
   reset() {
     for (let b of this.balls) {
       this.world.removeRigidBody(b.body);
@@ -799,7 +860,12 @@ export class Simulator {
     this.ramp = [];
     this.keys.clear();
     this.yaw = 0;
-    this.robot.setTranslation({ x: 0.42, y: 0.14, z: 1.62 }, true);
+    this.options.robot1 ??= 0;
+    this.options.robot2 ??= 2;
+    if (this.options.robot2 === this.options.robot1)
+      this.options.robot2 = (this.options.robot1 + 1) % 4;
+    this.robot.setTranslation(this.robotSpawn(this.options.robot1), true);
+    this.styleRobot(this.robotMesh, this.options.robot1);
     this.robot.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
     this.robot.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.robot.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -829,7 +895,7 @@ export class Simulator {
         (side === 1 ? this.blueReserve : this.redReserve).push(ball);
       }
     }
-    this.inventory = this.blueReserve.splice(0, 3);
+    this.inventory = this.selectedReserve.splice(0, 3);
     for (const ball of this.inventory) {
       ball.state = 'held';
       ball.mesh.visible = false;
@@ -838,26 +904,25 @@ export class Simulator {
     this.secondFlywheel = 0;
     this.secondReverseClock = 0;
     this.secondPadButtons = [];
+    const remaining = [0, 1, 2, 3].filter(
+      (id) => id !== this.options.robot1 && id !== this.options.robot2,
+    );
+    const ids = [remaining[0], this.options.robot2, remaining[1]];
     for (const [i, bot] of this.bots.entries()) {
-      const enabled =
-        this.options.timed || (this.options.players === 2 && i === 1);
-      bot.body.setEnabled(enabled);
-      bot.mesh.visible = enabled;
+      const id = ids[i];
+      bot.side = id < 2 ? 1 : -1;
+      bot.body.setEnabled(true);
+      bot.mesh.visible = true;
       bot.inventory = [];
-      bot.cooldown = 1 + i * 0.5;
+      bot.cooldown = 0;
       bot.yaw = 0;
-      bot.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
       bot.gate = false;
-      const pos =
-        i === 0
-          ? { x: 1.1, y: 0.14, z: -1.2 }
-          : i === 1
-            ? { x: -0.42, y: 0.14, z: 1.62 }
-            : { x: -1.1, y: 0.14, z: -1.2 };
-      bot.body.setTranslation(pos, true);
+      bot.body.setTranslation(this.robotSpawn(id), true);
+      bot.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
       bot.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       bot.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-      if (enabled) {
+      this.styleRobot(bot.mesh, id);
+      if (this.options.players === 2 && i === 1) {
         bot.inventory = (
           bot.side === 1 ? this.blueReserve : this.redReserve
         ).splice(0, 3);
@@ -867,6 +932,7 @@ export class Simulator {
         }
       }
     }
+    if (this.gateMarker) this.gateMarker.position.x = -this.playerSide * 1.25;
     this.flywheel = 0;
     this.fireRequested = false;
     this.reverseClock = 0;
@@ -886,16 +952,15 @@ export class Simulator {
       overflow: 0,
       pattern: 0,
       speed: 0,
-      time: this.options.timed ? 30 : 120,
-      phase: this.options.timed ? 'AUTO' : 'FREE DRIVE',
+      time: 120,
+      phase: 'MANUAL',
       motif: this.motif,
       redScore: 0,
       running: false,
       started: false,
       gate: 0,
       nearGate: false,
-      message:
-        'R / L1 toggles intake. Space / R2 launches. Blue goal is on the left.',
+      message: `${this.allianceName} robot selected. R / L1 intake · Space / R2 shoot.`,
       shots: 0,
       hits: 0,
       ended: false,
@@ -905,7 +970,7 @@ export class Simulator {
     this.emit();
   }
   toggleIntake() {
-    if (!this.s.running || (this.options.timed && this.s.phase !== 'TELEOP'))
+    if (!this.s.running || (this.options.timed && this.s.phase !== 'MANUAL'))
       return;
     this.s.intake = !this.s.intake;
     this.s.message = this.s.intake
@@ -915,6 +980,16 @@ export class Simulator {
   }
   configure(v: Partial<Options>) {
     this.options = { ...this.options, ...v };
+    this.options.robot1 = Math.max(
+      0,
+      Math.min(3, Math.floor(this.options.robot1 ?? 0)),
+    );
+    this.options.robot2 = Math.max(
+      0,
+      Math.min(3, Math.floor(this.options.robot2 ?? 2)),
+    );
+    if (this.options.robot2 === this.options.robot1)
+      this.options.robot2 = (this.options.robot1 + 1) % 4;
     this.options.power = Math.max(3, Math.min(11, this.options.power));
     this.options.elevation = Math.max(
       25,
@@ -960,14 +1035,6 @@ export class Simulator {
       if (e.code === 'Enter') this.toggle();
       if (e.code === 'KeyR') this.toggleIntake();
       if (e.code === 'KeyH') this.loadArtifact();
-      if (
-        e.code === 'KeyF' &&
-        this.options.timed &&
-        this.s.phase !== 'TELEOP'
-      ) {
-        this.s.message = 'Gate control unlocks in TELEOP.';
-        this.emit();
-      }
       if (e.code === 'KeyC')
         this.options.view =
           this.options.view === 'Field'
@@ -1003,8 +1070,7 @@ export class Simulator {
         } catch {}
       }
       this.audio?.resume().catch(() => {});
-      this.s.message =
-        'R / L1: intake. Space / R2: launch. Blue goal and gate are on the left.';
+      this.s.message = `${this.allianceName} controls active. R / L1 intake · Space / R2 shoot · F / Square gate.`;
     } else this.s.message = 'Paused · Enter to resume';
     this.emit();
   }
@@ -1030,13 +1096,17 @@ export class Simulator {
   getLaunch() {
     let p = this.robot.translation();
     let yaw = this.options.assist
-      ? Math.atan2(-(-1.55 - p.x), -(-1.59 - p.z))
+      ? Math.atan2(-(-this.playerSide * 1.55 - p.x), -(-1.59 - p.z))
       : this.yaw;
     let x = p.x - Math.sin(yaw) * 0.23,
       z = p.z - Math.cos(yaw) * 0.23;
     let start = { x, y: p.y + 0.27, z };
     let velocity = this.options.assist
-      ? launchVelocity(start, { x: -1.55, y: 1.055, z: -1.59 })
+      ? launchVelocity(start, {
+          x: -this.playerSide * 1.55,
+          y: 1.055,
+          z: -1.59,
+        })
       : manualLaunch(this.options.power, this.options.elevation || 55, yaw, {
           x: this.robot.linvel().x + this.robot.angvel().y * (z - p.z),
           z: this.robot.linvel().z - this.robot.angvel().y * (x - p.x),
@@ -1045,13 +1115,8 @@ export class Simulator {
     // Ballistic world velocity remains unchanged; manual shots inherit chassis motion.
     return { start, velocity, yaw };
   }
-  shoot(automatic = false) {
-    if (
-      this.options.timed &&
-      this.s.phase !== 'TELEOP' &&
-      !(automatic && this.s.phase === 'AUTO')
-    )
-      return;
+  shoot() {
+    if (this.options.timed && this.s.phase !== 'MANUAL') return;
     if (!this.s.running || !this.inventory.length || this.shotClock > 0) return;
     let p = this.robot.translation();
     if (!inLaunchZone(p.x, p.z)) {
@@ -1147,7 +1212,7 @@ export class Simulator {
     this.shotClock = Math.max(0, this.shotClock - DT);
     this.reverseClock = Math.max(0, this.reverseClock - DT);
     this.adjustmentClock = Math.max(0, (this.adjustmentClock || 0) - DT);
-    const canDrive = !this.options.timed || this.s.phase === 'TELEOP';
+    const canDrive = !this.options.timed || this.s.phase === 'MANUAL';
     if (canDrive && !this.options.assist && this.adjustmentClock === 0) {
       const power =
         Number(this.keys.has('Equal') || buttons[15]?.pressed) -
@@ -1164,15 +1229,11 @@ export class Simulator {
       }
     }
     this.flywheel +=
-      ((this.inventory.length && (canDrive || this.s.phase === 'AUTO')
-        ? 1
-        : 0) -
-        this.flywheel) *
+      ((this.inventory.length && canDrive ? 1 : 0) - this.flywheel) *
       (1 - Math.exp(-DT / 0.22));
     if (this.fireRequested && canDrive) this.shoot();
     if (canDrive && (this.keys.has('KeyB') || buttons[1]?.pressed))
       this.reverseIntake();
-    this.updateBots();
     if (this.options.players === 2)
       this.updateSecondPlayer(pads[1] || undefined);
     let left = Number(
@@ -1196,14 +1257,6 @@ export class Simulator {
     if (!canDrive) {
       x = 0;
       z = 0;
-    }
-    if (this.options.timed && this.s.phase === 'AUTO') {
-      const elapsed = 30 - this.s.time;
-      if (elapsed > 1 && elapsed < 5) this.shoot(true);
-      if (elapsed > 6 && elapsed < 7) {
-        x = 0;
-        z = -0.5;
-      }
     }
     if (canDrive && this.options.view === 'Follow') {
       const c = Math.cos(this.yaw),
@@ -1269,24 +1322,28 @@ export class Simulator {
       (this.keys.has('Space') || buttons[7]?.pressed || buttons[0]?.pressed)
     )
       this.shoot();
-    this.s.gateDistance = gateReach(p.x, p.z, this.yaw);
+    this.s.gateDistance = gateReach(
+      p.x * this.playerSide,
+      p.z,
+      this.yaw * this.playerSide,
+    );
     this.s.nearGate = this.s.gateDistance <= 0.16;
     const wantsGate = this.keys.has('KeyF') || buttons[2]?.pressed;
     this.s.gatePrompt = !canDrive
-      ? 'Gate control unlocks in TELEOP'
+      ? 'Gate control is unavailable after time expires'
       : this.s.nearGate
         ? wantsGate
           ? 'Opening gate · keep holding F / Square'
-          : 'Hold F / Square to open blue gate'
-        : `Blue gate · ${Math.max(0, this.s.gateDistance - 0.16).toFixed(1)} m away`;
+          : `Hold F / Square to open ${this.allianceName} gate`
+        : `${this.allianceName} gate · ${Math.max(0, this.s.gateDistance - 0.16).toFixed(1)} m away`;
     if (wantsGate && !this.s.nearGate) {
       this.s.message =
-        'Approach the marked blue gate on the left. ' + this.s.gatePrompt;
+        `Approach the marked ${this.allianceName} gate. ` + this.s.gatePrompt;
     }
     for (let g of this.gates) {
       let pushing =
         (canDrive &&
-          g.side === -1 &&
+          g.side === -this.playerSide &&
           this.s.nearGate &&
           (this.keys.has('KeyF') || buttons[2]?.pressed)) ||
         this.bots.some((bot) => bot.gate && -bot.side === g.side);
@@ -1302,7 +1359,7 @@ export class Simulator {
         z: Math.sin((g.side * g.angle) / 2),
         w: Math.cos(g.angle / 2),
       });
-      if (g.side === -1) this.s.gate = g.angle / 0.55;
+      if (g.side === -this.playerSide) this.s.gate = g.angle / 0.55;
     }
     for (const b of this.balls) {
       if (!b.body.isEnabled() || b.body.isSleeping()) continue;
@@ -1345,13 +1402,13 @@ export class Simulator {
             b.body.setEnabled(false);
             b.mesh.visible = false;
             const rack = side === -1 ? this.ramp : this.redRamp;
-            if (b.owner === 1 && side === -1) this.s.hits++;
+            if (b.owner === 1 && side === -this.playerSide) this.s.hits++;
             const retained = rack.length < 9;
             if (retained) {
               rack.push(b);
-              if (side === -1) this.s.classified++;
+              if (side === -this.playerSide) this.s.classified++;
             } else {
-              if (side === -1) this.s.overflow++;
+              if (side === -this.playerSide) this.s.overflow++;
               b.state = 'free';
               b.body.setEnabled(true);
               b.body.setTranslation({ x: side * 1.61, y: 0.25, z: 0.55 }, true);
@@ -1360,9 +1417,7 @@ export class Simulator {
             }
             this.award(
               side === -1 ? 0 : 1,
-              this.s.phase === 'AUTO' || this.s.phase === 'TRANSITION'
-                ? 'autoArtifacts'
-                : 'teleopArtifacts',
+              'teleopArtifacts',
               retained ? 3 : 1,
             );
             this.s.message = retained
@@ -1431,7 +1486,13 @@ export class Simulator {
     for (let w of this.wheels) w.rotation.x += (this.s.speed * elapsed) / 0.07;
     if (this.gateMarker) {
       const mat = this.gateMarker.material as THREE.MeshBasicMaterial;
-      mat.color.set(this.s.nearGate ? '#cafb63' : '#87a8ef');
+      mat.color.set(
+        this.s.nearGate
+          ? '#cafb63'
+          : this.playerSide === 1
+            ? '#87a8ef'
+            : '#f18c95',
+      );
       mat.opacity = this.s.nearGate ? 0.85 : 0.5;
     }
     let shot = this.getLaunch();
@@ -1515,6 +1576,9 @@ export class Simulator {
     this.frame = requestAnimationFrame(this.tick);
   };
   emit() {
+    this.s.robot1 = this.options.robot1 ?? 0;
+    this.s.robot2 = this.options.robot2 ?? 2;
+    this.s.alliance = this.allianceName;
     this.s.players = this.options.players || 1;
     if (this.options.players === 2 && this.bots[1]) {
       const b = this.bots[1],
@@ -1523,8 +1587,8 @@ export class Simulator {
         magazine: b.inventory.map((v) => v.color),
         intake: this.secondIntake,
         speed: Math.hypot(b.body.linvel().x, b.body.linvel().z),
-        gate: (this.gates.find((g) => g.side === 1)?.angle || 0) / 0.55,
-        nearGate: gateReach(-p.x, p.z, -b.yaw) <= 0.16,
+        gate: (this.gates.find((g) => g.side === -b.side)?.angle || 0) / 0.55,
+        nearGate: gateReach(p.x * b.side, p.z, b.yaw * b.side) <= 0.16,
         controller: this.secondPadButtons.length ? 'Controller 2' : 'Keyboard',
       };
     } else this.s.player2 = undefined;
@@ -1534,7 +1598,7 @@ export class Simulator {
     this.s.assist = this.options.assist;
     const launch = this.getLaunch();
     this.s.goalDistance = Math.hypot(
-      -1.55 - launch.start.x,
+      -this.playerSide * 1.55 - launch.start.x,
       -1.59 - launch.start.z,
     );
     const v = launch.velocity;
@@ -1543,11 +1607,11 @@ export class Simulator {
       (Math.atan2(v.y, Math.hypot(v.x, v.z)) * 180) / Math.PI,
       launch.start.y,
     );
-    this.s.reserve = this.blueReserve.length;
+    this.s.reserve = this.selectedReserve.length;
     this.s.motif = this.motif;
     this.s.view = this.options.view;
     this.s.magazine = this.inventory.map((b) => b.color);
-    this.s.ramp = this.ramp.map((b) => b.color);
+    this.s.ramp = this.selectedRamp.map((b) => b.color);
     this.cb({
       ...this.s,
       magazine: [...this.s.magazine],
@@ -1658,7 +1722,7 @@ export class Simulator {
     }
   }
   reverseIntake() {
-    if (this.options.timed && this.s.phase !== 'TELEOP') return;
+    if (this.options.timed && this.s.phase !== 'MANUAL') return;
     if (!this.s.running || !this.inventory.length || this.reverseClock > 0)
       return;
     this.s.intake = false;
@@ -1687,31 +1751,29 @@ export class Simulator {
   loadArtifact() {
     if (
       !this.s.running ||
-      (this.options.timed && this.s.phase !== 'TELEOP') ||
-      !this.blueReserve.length
+      (this.options.timed && this.s.phase !== 'MANUAL') ||
+      !this.selectedReserve.length
     )
       return;
     const p = this.robot.translation();
-    if (p.x > 1.02 && p.z > 1.02) {
-      this.s.message =
-        'Clear the blue loading zone before the human player feeds.';
+    if (p.x * this.playerSide > 1.02 && p.z > 1.02) {
+      this.s.message = 'Clear your loading zone before the human player feeds.';
       return;
     }
-    const b = this.blueReserve.shift()!;
+    const b = this.selectedReserve.shift()!;
     b.state = 'free';
     b.body.setEnabled(true);
-    b.body.setTranslation({ x: 1.69, y: 0.08, z: 1.6 }, true);
+    b.body.setTranslation({ x: this.playerSide * 1.69, y: 0.08, z: 1.6 }, true);
     b.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     b.mesh.visible = true;
-    this.s.message =
-      'Human player placed one artifact in the blue loading zone';
+    this.s.message = 'Human player placed one artifact in your loading zone';
     this.emit();
   }
   toggleSecondIntake() {
     if (
       this.options.players === 2 &&
       this.s.running &&
-      (!this.options.timed || this.s.phase === 'TELEOP')
+      (!this.options.timed || this.s.phase === 'MANUAL')
     ) {
       this.secondIntake = !this.secondIntake;
       this.emit();
@@ -1720,8 +1782,7 @@ export class Simulator {
   updateSecondPlayer(pad?: Gamepad) {
     const bot = this.bots[1];
     if (!bot?.body.isEnabled()) return;
-    if (this.options.timed && this.s.phase === 'AUTO') return;
-    const active = !this.options.timed || this.s.phase === 'TELEOP';
+    const active = !this.options.timed || this.s.phase === 'MANUAL';
     const axes = pad?.axes || [],
       buttons = pad?.buttons || [];
     if (active && !this.options.assist && this.adjustmentClock === 0) {
@@ -1807,7 +1868,7 @@ export class Simulator {
     );
     bot.gate =
       active &&
-      gateReach(-p.x, p.z, -bot.yaw) <= 0.16 &&
+      gateReach(p.x * bot.side, p.z, bot.yaw * bot.side) <= 0.16 &&
       (this.keys.has('KeyO') || !!buttons[2]?.pressed);
     if (active)
       for (const b of this.balls)
@@ -1846,7 +1907,7 @@ export class Simulator {
       inLaunchZone(p.x, p.z)
     ) {
       const yaw = this.options.assist
-        ? Math.atan2(-(1.55 - p.x), -(-1.59 - p.z))
+        ? Math.atan2(-(-bot.side * 1.55 - p.x), -(-1.59 - p.z))
         : bot.yaw;
       const start = {
         x: p.x - Math.sin(yaw) * 0.23,
@@ -1860,7 +1921,7 @@ export class Simulator {
         z: chassis.z - omega * (start.x - p.x),
       };
       const velocity = this.options.assist
-        ? launchVelocity(start, { x: 1.55, y: 1.055, z: -1.59 })
+        ? launchVelocity(start, { x: -bot.side * 1.55, y: 1.055, z: -1.59 })
         : manualLaunch(
             this.options.power,
             this.options.elevation || 55,
@@ -1889,150 +1950,6 @@ export class Simulator {
     }
   }
 
-  updateBots() {
-    if (!this.options.timed) return;
-    const active = this.s.phase === 'AUTO' || this.s.phase === 'TELEOP';
-    for (const [index, bot] of this.bots.entries()) {
-      if (this.options.players === 2 && index === 1 && this.s.phase !== 'AUTO')
-        continue;
-      bot.gate = false;
-      bot.cooldown = Math.max(0, bot.cooldown - DT);
-      const p = bot.body.translation(),
-        q = bot.body.rotation();
-      bot.yaw = Math.atan2(
-        2 * (q.w * q.y + q.x * q.z),
-        1 - 2 * (q.y * q.y + q.z * q.z),
-      );
-      let target = { x: p.x, z: p.z },
-        heading = bot.yaw,
-        wantShoot = false,
-        wantIntake = false;
-      const rack = bot.side === 1 ? this.ramp : this.redRamp;
-      if (active) {
-        if (this.s.phase === 'AUTO') {
-          const elapsed = 30 - this.s.time;
-          wantShoot = elapsed > 1 && elapsed < 5;
-          if (elapsed > 6 && elapsed < 8) target = { x: p.x, z: p.z + 0.45 };
-        } else if (this.s.time <= 20) {
-          target = { x: bot.side * 1.1, z: 1.49 };
-          heading = 0;
-        } else if (rack.length >= 7) {
-          target = { x: -bot.side * 1.29, z: 0.36 };
-          bot.gate = Math.hypot(p.x - target.x, p.z - target.z) < 0.14;
-        } else if (bot.inventory.length) {
-          target = { x: bot.side * (0.28 + index * 0.13), z: -0.85 };
-          wantShoot =
-            Math.hypot(target.x - p.x, target.z - p.z) < 0.15 &&
-            Math.hypot(bot.body.linvel().x, bot.body.linvel().z) < 0.2;
-        } else {
-          const available = this.balls.filter(
-            (b) => b.state === 'free' && b.body.translation().y < 0.17,
-          );
-          const nearest = available.sort((a, b) => {
-            let ap = a.body.translation(),
-              bp = b.body.translation();
-            return (
-              Math.hypot(ap.x - p.x, ap.z - p.z) -
-              Math.hypot(bp.x - p.x, bp.z - p.z)
-            );
-          })[0];
-          if (nearest) {
-            let pos = nearest.body.translation();
-            let dx = pos.x - p.x,
-              dz = pos.z - p.z,
-              dist = Math.hypot(dx, dz);
-            heading = Math.atan2(-dx, -dz);
-            target = {
-              x: pos.x - (dx / Math.max(0.01, dist)) * 0.26,
-              z: pos.z - (dz / Math.max(0.01, dist)) * 0.26,
-            };
-            wantIntake = true;
-          }
-        }
-      }
-      let dx = target.x - p.x,
-        dz = target.z - p.z,
-        dist = Math.hypot(dx, dz),
-        scale = Math.min(1.05, dist * 2.7) / Math.max(dist, 0.001);
-      let vx = dx * scale,
-        vz = dz * scale;
-      if (active && dist > 0.2) {
-        for (const other of [
-          this.robot,
-          ...this.bots.filter((b) => b !== bot).map((b) => b.body),
-        ]) {
-          let op = other.translation(),
-            dx = p.x - op.x,
-            dz = p.z - op.z,
-            d = Math.hypot(dx, dz);
-          if (d < 0.6 && d > 0.01) {
-            vx += (dx / d) * (0.6 - d) * 2;
-            vz += (dz / d) * (0.6 - d) * 2;
-          }
-        }
-      }
-      if (!active) {
-        vx = 0;
-        vz = 0;
-      }
-      const imp = driveImpulse(
-        bot.body.linvel(),
-        { x: vx, z: vz },
-        bot.body.mass(),
-        DT,
-      );
-      if (p.y < 0.22) bot.body.applyImpulse({ x: imp.x, y: 0, z: imp.z }, true);
-      const error = Math.atan2(
-        Math.sin(heading - bot.yaw),
-        Math.cos(heading - bot.yaw),
-      );
-      bot.body.applyTorqueImpulse(
-        {
-          x: 0,
-          y: Math.max(
-            -0.08,
-            Math.min(0.08, (error * 4 - bot.body.angvel().y) * 0.025),
-          ),
-          z: 0,
-        },
-        true,
-      );
-      if (wantIntake)
-        for (const b of this.balls)
-          this.captureArtifact(
-            b,
-            bot.body,
-            bot.yaw,
-            bot.inventory,
-            true,
-            index + 2,
-          );
-      if (
-        wantShoot &&
-        bot.inventory.length &&
-        bot.cooldown === 0 &&
-        inLaunchZone(p.x, p.z)
-      ) {
-        const gx = -bot.side * 1.55,
-          heading = Math.atan2(-(gx - p.x), -(-1.59 - p.z));
-        const start = {
-          x: p.x - Math.sin(heading) * 0.25,
-          y: p.y + 0.27,
-          z: p.z - Math.cos(heading) * 0.25,
-        };
-        const v = launchVelocity(start, { x: gx, y: 1.055, z: -1.59 });
-        const b = bot.inventory.shift()!;
-        b.state = 'flight';
-        b.owner = index + 2;
-        b.previousY = start.y;
-        b.body.setEnabled(true);
-        b.body.setTranslation(start, true);
-        b.body.setLinvel(v, true);
-        b.mesh.visible = true;
-        bot.cooldown = 0.85;
-      }
-    }
-  }
   award(alliance: 0 | 1, category: keyof ScoreDetail, points: number) {
     if (this.s.breakdown) this.s.breakdown[alliance][category] += points;
     if (alliance === 0) this.s.score += points;
@@ -2040,51 +1957,9 @@ export class Simulator {
   }
   advanceMatch(dt = DT) {
     if (this.s.phase === 'COMPLETE') return;
-    const remainder = Math.max(0, dt - this.s.time);
     this.s.time = Math.max(0, this.s.time - dt);
     if (this.s.time > 0) return;
-    if (this.s.phase === 'AUTO') {
-      this.s.phase = 'TRANSITION';
-      this.s.time = 8;
-      this.s.intake = false;
-      this.fireRequested = false;
-      this.keys.clear();
-      this.s.message = 'Autonomous complete · 8-second scoring transition';
-      if (remainder > 1e-8) this.advanceMatch(remainder);
-      return;
-    }
-    if (this.s.phase === 'TRANSITION') {
-      this.award(
-        0,
-        'autoPattern',
-        patternPoints(
-          this.ramp.map((b) => b.color),
-          this.motif,
-        ),
-      );
-      this.award(
-        1,
-        'autoPattern',
-        patternPoints(
-          this.redRamp.map((b) => b.color),
-          this.motif,
-        ),
-      );
-      for (const actor of [{ body: this.robot, side: 1 }, ...this.bots]) {
-        const p = actor.body.translation();
-        if (!overLaunchLine(p.x, p.z)) {
-          this.award(actor.side === 1 ? 0 : 1, 'leave', 3);
-        }
-      }
-      this.s.phase = 'TELEOP';
-      this.s.time = 120;
-      this.s.message =
-        'Teleop · driver controls enabled. R / L1 starts intake.';
-      this.sound(900);
-      if (remainder > 1e-8) this.advanceMatch(remainder);
-      return;
-    }
-    if (this.s.phase === 'TELEOP') {
+    if (this.s.phase === 'MANUAL') {
       this.s.phase = 'SETTLING';
       this.s.intake = false;
       this.fireRequested = false;
@@ -2122,7 +1997,10 @@ export class Simulator {
       );
       let blueFull = 0,
         redFull = 0;
-      for (const actor of [{ body: this.robot, side: 1 }, ...this.bots]) {
+      for (const actor of [
+        { body: this.robot, side: this.playerSide },
+        ...(this.options.players === 2 ? [this.bots[1]] : []),
+      ]) {
         const p = actor.body.translation(),
           q = actor.body.rotation(),
           yaw = Math.atan2(2 * q.w * q.y, 1 - 2 * q.y * q.y),

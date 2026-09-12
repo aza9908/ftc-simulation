@@ -1570,3 +1570,96 @@ kbd {
     gap: 4px;
   }
 }
+
+.robot-selection {
+  padding: 10px 14px;
+  background: #19232d;
+  border-bottom: 1px solid #3b4953;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+.robot-selection fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 280px;
+}
+.robot-selection legend {
+  color: #d6e3ee;
+  font-size: 14px;
+  padding: 0 0 7px;
+}
+.robot-choices {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.robot-choices button {
+  padding: 7px 5px;
+  background: #24364d;
+  border: 1px solid #5377ac;
+  color: #bdd8ff;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.robot-choices button.red-choice {
+  background: #422b34;
+  border-color: #9d5060;
+  color: #ffc2ce;
+}
+.robot-choices button.selected {
+  outline: 2px solid #edf4ff;
+  outline-offset: -2px;
+  background: #346195;
+  color: white;
+}
+.robot-choices button.red-choice.selected {
+  background: #944354;
+}
+.robot-choices button:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+.robot-choices b {
+  font-size: 18px;
+}
+.robot-selection p {
+  margin: 0;
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #aebdca;
+}
+.field-column .arena {
+  min-height: 400px;
+}
+@media (max-width: 420px) {
+  .robot-choices button {
+    font-size: 12px;
+    gap: 4px;
+  }
+  .robot-selection {
+    padding: 9px;
+  }
+}
+
+.red-driver .robot-number {
+  color: #ffd0d7;
+  background: #703044;
+  border-color: #b86a7b;
+}
+.second-blue {
+  border-top-color: #347ef0;
+}
+.second-blue h3 {
+  color: #9ac6ff;
+}
+.second-blue .second-actions button {
+  background: #263f63;
+  border-color: #557eb1;
+}

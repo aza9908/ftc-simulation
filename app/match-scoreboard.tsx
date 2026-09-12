@@ -7,7 +7,7 @@ export function MatchScoreboard({ s, timed }: { s: Snapshot; timed: boolean }) {
       <div className="match-board-title">
         <b>DECODE</b>
         <span>
-          {timed ? 'REGULATION MATCH' : 'FREE DRIVE'} ·{' '}
+          {timed ? 'MANUAL · 2 MIN' : 'UNTIMED MANUAL'} ·{' '}
           {s.players === 2 ? '2 PLAYERS' : '1 PLAYER'}
         </span>
         <span>2025–26</span>
@@ -20,7 +20,7 @@ export function MatchScoreboard({ s, timed }: { s: Snapshot; timed: boolean }) {
         <div
           className={
             'match-timer ' +
-            (timed && seconds <= 20 && s.phase === 'TELEOP'
+            (timed && seconds <= 20 && s.phase === 'MANUAL'
               ? 'closing-seconds'
               : '')
           }
@@ -34,7 +34,7 @@ export function MatchScoreboard({ s, timed }: { s: Snapshot; timed: boolean }) {
             {s.ended
               ? 'FINAL'
               : !s.running
-                ? `${s.phase || 'AUTO'} · ${s.started ? 'PAUSED' : 'READY'}`
+                ? `${s.phase || 'MANUAL'} · ${s.started ? 'PAUSED' : 'READY'}`
                 : timed
                   ? s.phase
                   : 'PRACTICE'}
@@ -45,23 +45,6 @@ export function MatchScoreboard({ s, timed }: { s: Snapshot; timed: boolean }) {
           <span>RED</span>
         </div>
       </div>
-      {timed && (
-        <div className="match-phase-track" aria-label="Regulation match phases">
-          {[
-            ['AUTO', '0:30'],
-            ['TRANSITION', '0:08'],
-            ['TELEOP', '2:00'],
-          ].map(([phase, duration]) => (
-            <span
-              key={phase}
-              className={s.phase === phase ? 'current' : ''}
-              aria-current={s.phase === phase ? 'step' : undefined}
-            >
-              {phase} <b>{duration}</b>
-            </span>
-          ))}
-        </div>
-      )}
       <div className="match-board-meta">
         <span>
           Magazine <b>{s.magazine.length}/3</b>
@@ -85,11 +68,8 @@ export function MatchScoreboard({ s, timed }: { s: Snapshot; timed: boolean }) {
 }
 
 const rows: [keyof ScoreDetail, string][] = [
-  ['autoArtifacts', 'AUTO · Artifacts'],
-  ['autoPattern', 'AUTO · Pattern'],
-  ['leave', 'AUTO · Leave'],
-  ['teleopArtifacts', 'TELEOP · Artifacts'],
-  ['teleopPattern', 'TELEOP · Pattern'],
+  ['teleopArtifacts', 'Artifacts'],
+  ['teleopPattern', 'Pattern'],
   ['base', 'Return to base'],
 ];
 export function MatchResults({
