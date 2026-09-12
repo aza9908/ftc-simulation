@@ -26,7 +26,8 @@ const initial: Snapshot = {
   magazine: ['P', 'G', 'P'],
   ramp: [],
   speed: 0,
-  time: 120,
+  time: 30,
+  phase: 'AUTO',
   running: false,
   gate: 0,
   nearGate: false,
@@ -47,7 +48,8 @@ export default function Home() {
     [view, setView] = useState('Field'),
     [sound, setSound] = useState(true),
     [help, setHelp] = useState(false),
-    [timed, setTimed] = useState(false);
+    [timed, setTimed] = useState(true),
+    [players, setPlayers] = useState<1 | 2>(1);
   useEffect(() => {
     let dead = false;
     let owned: Simulator | null = null;
@@ -115,6 +117,51 @@ export default function Home() {
       </header>
       <div className="workspace">
         <div className="field-column">
+          <div className="match-setup">
+            <fieldset>
+              <legend>Players</legend>
+              {([1, 2] as const).map((count) => (
+                <label
+                  key={count}
+                  className={players === count ? 'selected' : ''}
+                >
+                  <input
+                    type="radio"
+                    name="players"
+                    checked={players === count}
+                    onChange={() => {
+                      setPlayers(count);
+                      sim.current?.configure({ players: count, view: 'Field' });
+                      setView('Field');
+                      sim.current?.reset();
+                    }}
+                  />
+                  {count === 1 ? '1 player' : '2 players · local'}
+                </label>
+              ))}
+            </fieldset>
+            <fieldset>
+              <legend>Session</legend>
+              {[true, false].map((match) => (
+                <label
+                  key={String(match)}
+                  className={timed === match ? 'selected' : ''}
+                >
+                  <input
+                    type="radio"
+                    name="session"
+                    checked={timed === match}
+                    onChange={() => {
+                      setTimed(match);
+                      sim.current?.configure({ timed: match });
+                      sim.current?.reset();
+                    }}
+                  />
+                  {match ? 'Regulation match' : 'Free practice'}
+                </label>
+              ))}
+            </fieldset>
+          </div>
           <section className="arena">
             <div
               ref={mount}
@@ -143,6 +190,18 @@ export default function Home() {
               </div>
             </div>
 
+            {timed &&
+              s.running &&
+              (s.phase === 'AUTO' || s.phase === 'TRANSITION') && (
+                <div className="phase-notice">
+                  <b>{s.phase === 'AUTO' ? 'AUTONOMOUS' : 'TRANSITION'}</b>
+                  <span>
+                    {s.phase === 'AUTO'
+                      ? 'Robots run their preset routine. Driver control starts at TELEOP.'
+                      : 'Scoring pause. TELEOP starts when this countdown reaches zero.'}
+                  </span>
+                </div>
+              )}
             {!s.ready && (
               <div className="loading-message" role="status">
                 {s.message}
@@ -165,12 +224,16 @@ export default function Home() {
                 <h2>
                   {s.ended
                     ? `${s.score} points. One more run?`
-                    : 'Take the controls.'}
+                    : timed
+                      ? 'Ready for the match?'
+                      : 'Take the controls.'}
                 </h2>
                 <p>
                   {s.ended
                     ? `${s.classified} classified · ${s.overflow} overflow · ${s.pattern} pattern points`
-                    : 'Collect. Aim. Launch. Open the gate and go again.'}
+                    : timed
+                      ? '30 seconds AUTO · 8 seconds transition · 2 minutes TELEOP.'
+                      : 'Collect. Aim. Launch. Open the gate and go again.'}
                 </p>
                 <button
                   className="primary"
@@ -180,7 +243,11 @@ export default function Home() {
                   }}
                 >
                   <Play size={17} fill="currentColor" />
-                  {s.ended ? 'Drive again' : 'Start driving'}
+                  {s.started
+                    ? 'Resume'
+                    : timed
+                      ? 'Start match'
+                      : 'Start driving'}
                   <kbd>Enter</kbd>
                 </button>
               </div>
@@ -294,7 +361,7 @@ export default function Home() {
           <div className="robot-title">
             <div className="robot-number">01</div>
             <div>
-              <h2>Blue Mecanum</h2>
+              <h2>{players === 2 ? 'Player 1 · Blue' : 'Blue Mecanum'}</h2>
               <p>Holonomic drive · 3-artifact intake</p>
             </div>
           </div>
@@ -506,22 +573,56 @@ export default function Home() {
               </strong>
             </div>
           </section>
+          {players === 2 && (
+            <section className="second-driver">
+              <div className="section-title">
+                <h3>Player 2 · Red</h3>
+                <span>{s.player2?.controller || 'Keyboard'}</span>
+              </div>
+              <div className="second-stats">
+                <span>
+                  Magazine <b>{s.player2?.magazine.length || 0}/3</b>
+                </span>
+                <span>{s.player2?.speed.toFixed(2) || '0.00'} m/s</span>
+              </div>
+              <p>
+                Arrow keys move · , / . turn
+                <br />I intake · / shoot · O gate · U reverse
+              </p>
+              <div className="second-actions">
+                <button
+                  className={s.player2?.intake ? 'active' : ''}
+                  onClick={() => sim.current?.toggleSecondIntake()}
+                >
+                  Intake {s.player2?.intake ? 'ON' : 'OFF'}
+                </button>
+                <button
+                  onPointerDown={(e) => {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    sim.current?.press('Slash', true);
+                  }}
+                  onPointerUp={() => sim.current?.press('Slash', false)}
+                  onPointerCancel={() => sim.current?.press('Slash', false)}
+                  onClick={() => {
+                    sim.current?.press('Slash', true);
+                    setTimeout(() => sim.current?.press('Slash', false), 120);
+                  }}
+                >
+                  Shoot
+                </button>
+              </div>
+              <small>
+                {s.player2?.nearGate
+                  ? 'Hold O / Square to push the red gate.'
+                  : 'Red goal and gate are on the right.'}
+              </small>
+            </section>
+          )}
           <div className="session-actions">
-            <div className="setting-row">
-              <label htmlFor="timed">Four-robot match practice</label>
-              <Switch
-                id="timed"
-                checked={timed}
-                onCheckedChange={(v) => {
-                  setTimed(v);
-                  sim.current?.configure({ timed: v });
-                  sim.current?.reset();
-                }}
-              />
-            </div>
             <p className="hint">
-              30s preset AUTO → 8s transition → 120s TELEOP. Return to the blue
-              base in the last 20s.
+              {timed
+                ? 'Regulation timing: 0:30 AUTO → 0:08 transition → 2:00 TELEOP. Three practice bots fill the field in one-player mode; two bots in two-player mode.'
+                : 'Untimed practice. Switch to Regulation match above the field for the official timer.'}
             </p>
             <div className="action-buttons">
               <button onClick={start} disabled={!s.ready || s.ended}>
@@ -577,11 +678,24 @@ export default function Home() {
             ×
           </button>
           <Gamepad2 size={26} />
-          <h2>Made for your controller.</h2>
+          <h2>
+            {players === 2
+              ? 'Two drivers. One field.'
+              : 'Made for your controller.'}
+          </h2>
           <p>
             Connect your PS5 DualSense by USB or Bluetooth, then press any
             button. A standard browser gamepad mapping is required.
           </p>
+          {players === 2 && (
+            <p>
+              Player 1: WASD, Q/E, R intake, Space shoot, F gate. Player 2:
+              arrows, comma/period turn, I intake, slash shoot, O gate, U
+              reverse. Right Shift slows Player 2. Two controllers map to Blue
+              and Red in browser connection order; press a button on each to
+              connect. The same button layout applies to both.
+            </p>
+          )}
           <div className="control-guide">
             <span>Left stick</span>
             <b>Move · forward in Follow view</b>

@@ -1429,3 +1429,144 @@ kbd {
     font-size: 36px;
   }
 }
+
+.match-setup {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #1c252e;
+  border-bottom: 1px solid #3b4953;
+}
+.match-setup fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.match-setup legend {
+  font-size: 12px;
+  color: #b6c7d6;
+  padding: 0 0 5px;
+}
+.match-setup label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  padding: 6px 10px;
+  background: #2b3742;
+  border: 1px solid #4d5e6c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.match-setup label.selected {
+  background: #244467;
+  border-color: #7fafff;
+  color: #fff;
+}
+.match-setup input {
+  accent-color: #a3c5ff;
+  width: 14px;
+  height: 14px;
+}
+.match-phase-track {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: #141d27;
+}
+.match-phase-track span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: #a2afbf;
+  padding: 6px;
+  border-top: 3px solid transparent;
+}
+.match-phase-track .current {
+  border-color: #ffe42c;
+  color: #fff;
+  background: #303847;
+}
+.phase-notice {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 15px;
+  background: #15202be8;
+  border: 1px solid #718594;
+  border-radius: 5px;
+  font-size: 12px;
+  width: min(86%, 500px);
+  text-align: center;
+  pointer-events: none;
+}
+.phase-notice b {
+  color: #ffe42c;
+  font-size: 14px;
+}
+.second-driver {
+  border-top: 3px solid #d93146;
+  padding: 15px 0;
+}
+.second-driver h3 {
+  color: #ff9ca8;
+}
+.second-driver p {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 9px 0;
+}
+.second-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+.second-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.second-actions button {
+  flex: 1;
+  border: 1px solid #83515d;
+  background: #482b37;
+  color: #fff;
+  padding: 9px;
+  border-radius: 5px;
+  font-size: 14px;
+}
+.second-actions button.active {
+  background: #285b34;
+  border-color: #92cda0;
+}
+.second-driver small {
+  font-size: 12px;
+  color: #c6d0dc;
+}
+@media (max-width: 760px) {
+  .second-driver {
+    grid-column: 1/-1;
+  }
+  .match-setup {
+    padding: 8px;
+  }
+  .match-setup label {
+    padding: 5px 8px;
+  }
+  .match-phase-track span {
+    font-size: 12px;
+    gap: 4px;
+  }
+}

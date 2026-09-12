@@ -243,6 +243,124 @@ assert(!s.s.intake);
 pad.buttons[9].pressed = true;
 step(1);
 assert(!s.s.running);
+// Wall-clock countdown must preserve overshoot at phase boundaries.
+s.options.timed = true;
+s.options.players = 1;
+s.reset();
+s.s.running = true;
+s.advanceMatch(30.25);
+assert.equal(s.s.phase, 'TRANSITION');
+assert.equal(s.s.time, 7.75);
+s.advanceMatch(8);
+assert.equal(s.s.phase, 'TELEOP');
+assert.equal(s.s.time, 119.75);
+s.advanceMatch(119.75);
+assert.equal(s.s.phase, 'SETTLING');
+// Two local players: independent drive commands and no AI takeover in free play.
+Object.defineProperty(navigator, 'getGamepads', {
+  value: () => [],
+  configurable: true,
+});
+s.options.timed = false;
+s.options.players = 2;
+s.reset();
+s.s.running = true;
+assert.equal(s.bots.filter((b) => b.body.isEnabled()).length, 1);
+assert.equal(s.bots[1].inventory.length, 3);
+const red = s.bots[1];
+s.robot.setTranslation({ x: 0.5, y: 0.14, z: 0.7 }, true);
+red.body.setTranslation({ x: -0.5, y: 0.14, z: 0.7 }, true);
+s.keys.add('ArrowUp');
+step(90);
+s.keys.clear();
+assert(red.body.translation().z < 0.25, 'arrow keys drive Player 2');
+assert(
+  Math.abs(s.robot.translation().z - 0.7) < 0.04,
+  'Player 2 arrows do not drive Player 1',
+);
+assert.equal(s.s.intake, false);
+s.toggleSecondIntake();
+assert(s.secondIntake);
+assert.equal(s.s.intake, false);
+// Both players are locked during AUTO; the red preset routine still runs.
+s.options.timed = true;
+s.reset();
+s.s.running = true;
+s.toggleSecondIntake();
+assert(!s.secondIntake);
+s.options.timed = false;
+s.reset();
+s.s.running = true;
+red.body.setTranslation({ x: 1.22, y: 0.14, z: 0.4 }, true);
+s.keys.add('KeyO');
+step(140);
+assert(
+  s.gates.find((g) => g.side === 1).angle > 0.5,
+  'Player 2 opens red gate',
+);
+s.keys.clear();
+// Gate contact travel follows the manual's approximately 51 mm horizontal push.
+const angle = -0.55,
+  tip = { x: 0.125, y: -0.07 };
+const moved = {
+  x: tip.x * Math.cos(angle) - tip.y * Math.sin(angle),
+  y: tip.x * Math.sin(angle) + tip.y * Math.cos(angle),
+};
+assert(Math.abs(tip.x - moved.x - 0.051) < 0.005);
+assert(Math.abs(0.2 + moved.y - 0.076) < 0.005);
+// Player 2 shots score only through the physical red goal, with spin-up and cooldown.
+s.reset();
+s.s.running = true;
+red.body.setTranslation({ x: -0.42, y: 0.14, z: 1.62 }, true);
+s.keys.add('Slash');
+step(480);
+s.keys.clear();
+assert(s.s.redScore > 0, 'Player 2 can score in red goal');
+assert(s.s.breakdown[1].teleopArtifacts > 0);
+// Two controller slots stay assigned when Controller 1 disconnects.
+s.reset();
+s.s.running = true;
+s.controllerSlots = [];
+const pad1 = {
+  connected: true,
+  mapping: 'standard',
+  index: 0,
+  axes: [0, 0, 0, 0],
+  buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })),
+};
+const pad2 = {
+  connected: true,
+  mapping: 'standard',
+  index: 1,
+  axes: [0, -1, 0, 0],
+  buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })),
+};
+Object.defineProperty(navigator, 'getGamepads', {
+  value: () => [pad1, pad2],
+  configurable: true,
+});
+s.robot.setTranslation({ x: 0.5, y: 0.14, z: 0.7 }, true);
+red.body.setTranslation({ x: -0.5, y: 0.14, z: 0.7 }, true);
+step(45);
+pad1.connected = false;
+step(45);
+assert(red.body.translation().z < 0.25);
+assert(
+  Math.abs(s.robot.translation().z - 0.7) < 0.04,
+  'Controller 2 cannot take over Player 1 after disconnection',
+);
+pad2.axes = [0, 0, 0, 0];
+pad2.buttons[4].pressed = true;
+step(1);
+assert(s.secondIntake);
+assert(!s.s.intake);
+Object.defineProperty(navigator, 'getGamepads', {
+  value: () => [],
+  configurable: true,
+});
+s.options.players = 1;
+s.options.timed = false;
+s.reset();
 // Compare the aiming model against Rapier flight, without any field collisions.
 const flightWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 flightWorld.timestep = 1 / 120;

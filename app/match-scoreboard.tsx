@@ -6,7 +6,10 @@ export function MatchScoreboard({ s, timed }: { s: Snapshot; timed: boolean }) {
     <section className="match-board" aria-label="Match scoreboard">
       <div className="match-board-title">
         <b>DECODE</b>
-        <span>{timed ? 'MATCH PRACTICE' : 'FREE DRIVE'}</span>
+        <span>
+          {timed ? 'REGULATION MATCH' : 'FREE DRIVE'} ·{' '}
+          {s.players === 2 ? '2 PLAYERS' : '1 PLAYER'}
+        </span>
         <span>2025–26</span>
       </div>
       <div className="match-board-scores">
@@ -31,7 +34,7 @@ export function MatchScoreboard({ s, timed }: { s: Snapshot; timed: boolean }) {
             {s.ended
               ? 'FINAL'
               : !s.running
-                ? 'PAUSED'
+                ? `${s.phase || 'AUTO'} · ${s.started ? 'PAUSED' : 'READY'}`
                 : timed
                   ? s.phase
                   : 'PRACTICE'}
@@ -42,6 +45,23 @@ export function MatchScoreboard({ s, timed }: { s: Snapshot; timed: boolean }) {
           <span>RED</span>
         </div>
       </div>
+      {timed && (
+        <div className="match-phase-track" aria-label="Regulation match phases">
+          {[
+            ['AUTO', '0:30'],
+            ['TRANSITION', '0:08'],
+            ['TELEOP', '2:00'],
+          ].map(([phase, duration]) => (
+            <span
+              key={phase}
+              className={s.phase === phase ? 'current' : ''}
+              aria-current={s.phase === phase ? 'step' : undefined}
+            >
+              {phase} <b>{duration}</b>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="match-board-meta">
         <span>
           Magazine <b>{s.magazine.length}/3</b>

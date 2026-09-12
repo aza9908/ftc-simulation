@@ -25,6 +25,16 @@ export type ScoreDetail = {
   base: number;
 };
 export type Snapshot = {
+  started?: boolean;
+  players?: number;
+  player2?: {
+    magazine: string[];
+    intake: boolean;
+    speed: number;
+    gate: number;
+    nearGate: boolean;
+    controller: string;
+  };
   breakdown?: [ScoreDetail, ScoreDetail];
   elevation?: number;
   power?: number;
@@ -78,6 +88,7 @@ type Gate = {
   side: number;
 };
 type Options = {
+  players: 1 | 2;
   elevation: number;
   assist: boolean;
   power: number;
@@ -112,8 +123,14 @@ export class Simulator {
     elevation: 55,
     view: 'Field',
     sound: true,
-    timed: false,
+    timed: true,
+    players: 1,
   };
+  controllerSlots: number[] = [];
+  secondIntake = false;
+  secondFlywheel = 0;
+  secondReverseClock = 0;
+  secondPadButtons: boolean[] = [];
   keys = new Set<string>();
   s: Snapshot = {
     ready: true,
@@ -487,30 +504,58 @@ export class Simulator {
       }
       for (let z of [-0.95, 0.2])
         this.box(side * 1.61, 0.09, z, 0.025, 0.18, 0.025, '#9caeb5', true);
-      let body = this.world.createRigidBody(
+      const body = this.world.createRigidBody(
         RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
-          side * 1.61,
-          0.205,
-          0.36,
+          side * 1.47,
+          0.2,
+          0.35,
         ),
       );
-      this.world.createCollider(
-        RAPIER.ColliderDesc.cuboid(0.14, 0.155, 0.015),
-        body,
-      );
-      let gate = new THREE.Group();
-      this.box(0, 0, 0, 0.28, 0.31, 0.03, color, false, gate);
-      this.box(
-        -side * 0.14,
-        -0.07,
-        0.05,
-        0.1,
-        0.03,
-        0.17,
-        '#dbe6e4',
+      const gate = new THREE.Group();
+      const from = new THREE.Vector3(-side * 0.125, -0.07, 0),
+        to = new THREE.Vector3(side * 0.19, 0.13, 0);
+      const center = from.clone().add(to).multiplyScalar(0.5),
+        length = from.distanceTo(to);
+      const rotation = Math.atan2(to.y - from.y, to.x - from.x);
+      const arm = this.box(
+        center.x,
+        center.y,
+        0,
+        length,
+        0.024,
+        0.018,
+        '#292e33',
         false,
         gate,
       );
+      arm.rotation.z = rotation;
+      this.world.createCollider(
+        RAPIER.ColliderDesc.cuboid(length / 2, 0.012, 0.009)
+          .setTranslation(center.x, center.y, 0)
+          .setRotation({
+            x: 0,
+            y: 0,
+            z: Math.sin(rotation / 2),
+            w: Math.cos(rotation / 2),
+          }),
+        body,
+      );
+      const eye = new THREE.Mesh(
+        new THREE.TorusGeometry(0.022, 0.007, 8, 24),
+        this.mat('#343b40'),
+      );
+      eye.position.copy(from);
+      gate.add(eye);
+      const pivot = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.018, 0.05, 16),
+        this.mat('#bcc4c9'),
+      );
+      pivot.rotation.x = Math.PI / 2;
+      gate.add(pivot);
+      for (const x of [side * 1.47, side * 1.74]) {
+        this.box(x, 0.15, 0.385, 0.018, 0.3, 0.035, '#8f9ca3', true);
+        this.box(x, 0.3, 0.385, 0.032, 0.025, 0.045, '#b4bdc2');
+      }
       this.scene.add(gate);
       this.gates.push({ body, mesh: gate, angle: 0, velocity: 0, side });
       if (side === -1) {
@@ -762,7 +807,8 @@ export class Simulator {
       g.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
       g.angle = 0;
       g.velocity = 0;
-      g.body.setTranslation({ x: g.side * 1.61, y: 0.205, z: 0.36 }, true);
+      g.body.setTranslation({ x: g.side * 1.47, y: 0.2, z: 0.35 }, true);
+      g.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
     }
     this.blueReserve = [];
     this.redReserve = [];
@@ -788,13 +834,19 @@ export class Simulator {
       ball.state = 'held';
       ball.mesh.visible = false;
     }
+    this.secondIntake = false;
+    this.secondFlywheel = 0;
+    this.secondReverseClock = 0;
+    this.secondPadButtons = [];
     for (const [i, bot] of this.bots.entries()) {
-      const enabled = this.options.timed;
+      const enabled =
+        this.options.timed || (this.options.players === 2 && i === 1);
       bot.body.setEnabled(enabled);
       bot.mesh.visible = enabled;
       bot.inventory = [];
       bot.cooldown = 1 + i * 0.5;
       bot.yaw = 0;
+      bot.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
       bot.gate = false;
       const pos =
         i === 0
@@ -839,6 +891,7 @@ export class Simulator {
       motif: this.motif,
       redScore: 0,
       running: false,
+      started: false,
       gate: 0,
       nearGate: false,
       message:
@@ -877,10 +930,10 @@ export class Simulator {
     if (e.defaultPrevented) return;
     const target = e.target as HTMLElement;
     const editing = !!target?.closest(
-      'textarea, input:not([type="checkbox"]):not([type="range"]), [contenteditable="true"]',
+      'textarea, input:not([type="checkbox"]):not([type="range"]):not([type="radio"]), [contenteditable="true"]',
     );
     const adjusting = !!target?.closest(
-      '[role="switch"],[role="slider"],input[type="checkbox"],input[type="range"]',
+      '[role="switch"],[role="slider"],input[type="checkbox"],input[type="range"],input[type="radio"],select',
     );
     if (controlOwnsKey(e.code, editing, adjusting)) return;
     if (
@@ -897,7 +950,13 @@ export class Simulator {
       ].includes(e.code)
     )
       e.preventDefault();
+    if (
+      this.options.players === 2 &&
+      ['Slash', 'Comma', 'Period'].includes(e.code)
+    )
+      e.preventDefault();
     if (!e.repeat) {
+      if (e.code === 'KeyI') this.toggleSecondIntake();
       if (e.code === 'Enter') this.toggle();
       if (e.code === 'KeyR') this.toggleIntake();
       if (e.code === 'KeyH') this.loadArtifact();
@@ -935,6 +994,7 @@ export class Simulator {
   toggle() {
     if (this.s.ended) return;
     this.s.running = !this.s.running;
+    if (this.s.running) this.s.started = true;
     this.keys.clear();
     if (this.s.running) {
       if (!this.audio && this.options.sound) {
@@ -1037,10 +1097,20 @@ export class Simulator {
     this.s.message = 'Artifact launched';
     this.emit();
   }
-  step() {
-    const pad = Array.from(navigator.getGamepads?.() || []).find(
-      (p) => p && p.connected,
+  step(advanceClock = true) {
+    const connected = Array.from(navigator.getGamepads?.() || []).filter(
+      (p): p is Gamepad => !!p && p.connected && p.mapping === 'standard',
     );
+    this.controllerSlots ??= [];
+    for (const [i, p] of connected.entries()) {
+      const id = p.index ?? i;
+      if (!this.controllerSlots.includes(id) && this.controllerSlots.length < 2)
+        this.controllerSlots.push(id);
+    }
+    const pads = this.controllerSlots.map((id) =>
+      connected.find((p, i) => (p.index ?? i) === id),
+    );
+    const pad = pads[0];
     this.s.controller = pad
       ? pad.mapping === 'standard'
         ? 'Controller connected'
@@ -1057,6 +1127,21 @@ export class Simulator {
           : this.options.view === 'Follow'
             ? 'Top'
             : 'Field';
+    const secondButtons = pads[1]?.buttons || [];
+    if (this.options.players === 2) {
+      if (secondButtons[4]?.pressed && !this.secondPadButtons?.[4])
+        this.toggleSecondIntake();
+      if (secondButtons[9]?.pressed && !this.secondPadButtons?.[9])
+        this.toggle();
+      if (secondButtons[3]?.pressed && !this.secondPadButtons?.[3])
+        this.options.view =
+          this.options.view === 'Field'
+            ? 'Follow'
+            : this.options.view === 'Follow'
+              ? 'Top'
+              : 'Field';
+    }
+    this.secondPadButtons = secondButtons.map((b) => b.pressed);
     this.padButtons = buttons.map((b) => b.pressed);
     if (!this.s.running) return;
     this.shotClock = Math.max(0, this.shotClock - DT);
@@ -1088,10 +1173,24 @@ export class Simulator {
     if (canDrive && (this.keys.has('KeyB') || buttons[1]?.pressed))
       this.reverseIntake();
     this.updateBots();
-    let left = Number(this.keys.has('KeyA') || this.keys.has('ArrowLeft')),
-      right = Number(this.keys.has('KeyD') || this.keys.has('ArrowRight')),
-      up = Number(this.keys.has('KeyW') || this.keys.has('ArrowUp')),
-      down = Number(this.keys.has('KeyS') || this.keys.has('ArrowDown'));
+    if (this.options.players === 2)
+      this.updateSecondPlayer(pads[1] || undefined);
+    let left = Number(
+        this.keys.has('KeyA') ||
+          (this.options.players !== 2 && this.keys.has('ArrowLeft')),
+      ),
+      right = Number(
+        this.keys.has('KeyD') ||
+          (this.options.players !== 2 && this.keys.has('ArrowRight')),
+      ),
+      up = Number(
+        this.keys.has('KeyW') ||
+          (this.options.players !== 2 && this.keys.has('ArrowUp')),
+      ),
+      down = Number(
+        this.keys.has('KeyS') ||
+          (this.options.players !== 2 && this.keys.has('ArrowDown')),
+      );
     let x = right - left + deadzone(axes[0] || 0),
       z = down - up + deadzone(axes[1] || 0);
     if (!canDrive) {
@@ -1129,7 +1228,7 @@ export class Simulator {
     turn = demand.turn;
     let precision =
       this.keys.has('ShiftLeft') ||
-      this.keys.has('ShiftRight') ||
+      (this.options.players !== 2 && this.keys.has('ShiftRight')) ||
       (buttons[6]?.value || 0) > 0.2;
     let p = this.robot.translation(),
       vel = this.robot.linvel();
@@ -1191,23 +1290,19 @@ export class Simulator {
           this.s.nearGate &&
           (this.keys.has('KeyF') || buttons[2]?.pressed)) ||
         this.bots.some((bot) => bot.gate && -bot.side === g.side);
-      let acceleration =
-        (pushing ? 14 : 0) - 8 * Math.sin(g.angle + 0.15) - 5 * g.velocity;
+      const acceleration =
+        (pushing ? 6 : 0) - 1.6 * Math.cos(g.angle) - 5 * g.velocity;
       g.velocity += acceleration * DT;
-      g.angle = Math.max(0, Math.min(1.4, g.angle + g.velocity * DT));
-      if (g.angle === 0 || g.angle === 1.4) g.velocity = 0;
-      g.body.setNextKinematicTranslation({
-        x: g.side * 1.61,
-        y: 0.36 - Math.cos(g.angle) * 0.155,
-        z: 0.36 + Math.sin(g.angle) * 0.155,
-      });
+      g.angle = Math.max(0, Math.min(0.55, g.angle + g.velocity * DT));
+      if (g.angle === 0 || g.angle === 0.55) g.velocity = 0;
+      g.body.setNextKinematicTranslation({ x: g.side * 1.47, y: 0.2, z: 0.35 });
       g.body.setNextKinematicRotation({
-        x: -Math.sin(g.angle / 2),
+        x: 0,
         y: 0,
-        z: 0,
+        z: Math.sin((g.side * g.angle) / 2),
         w: Math.cos(g.angle / 2),
       });
-      if (g.side === -1) this.s.gate = g.angle / 1.4;
+      if (g.side === -1) this.s.gate = g.angle / 0.55;
     }
     for (const b of this.balls) {
       if (!b.body.isEnabled() || b.body.isSleeping()) continue;
@@ -1315,18 +1410,20 @@ export class Simulator {
           'Out-of-field artifact returned to the human-player tray.';
       }
     }
-    if (this.options.timed) this.advanceMatch();
+    if (this.options.timed && advanceClock) this.advanceMatch();
   }
 
   tick = (t: number) => {
     if (this.disposed) return;
-    let elapsed = this.last ? Math.min((t - this.last) / 1000, 0.1) : 0;
+    const wallElapsed = this.last ? Math.max(0, (t - this.last) / 1000) : 0;
+    let elapsed = Math.min(wallElapsed, 0.1);
     this.last = t;
     this.accum += elapsed;
     while (this.accum >= DT) {
-      this.step();
+      this.step(false);
       this.accum -= DT;
     }
+    if (this.s.running && this.options.timed) this.advanceMatch(wallElapsed);
     let p = this.robot.translation(),
       q = this.robot.rotation();
     this.robotMesh.position.set(p.x, p.y, p.z);
@@ -1418,6 +1515,19 @@ export class Simulator {
     this.frame = requestAnimationFrame(this.tick);
   };
   emit() {
+    this.s.players = this.options.players || 1;
+    if (this.options.players === 2 && this.bots[1]) {
+      const b = this.bots[1],
+        p = b.body.translation();
+      this.s.player2 = {
+        magazine: b.inventory.map((v) => v.color),
+        intake: this.secondIntake,
+        speed: Math.hypot(b.body.linvel().x, b.body.linvel().z),
+        gate: (this.gates.find((g) => g.side === 1)?.angle || 0) / 0.55,
+        nearGate: gateReach(-p.x, p.z, -b.yaw) <= 0.16,
+        controller: this.secondPadButtons.length ? 'Controller 2' : 'Keyboard',
+      };
+    } else this.s.player2 = undefined;
     this.s.flywheel = Math.round(this.flywheel * 100);
     this.s.elevation = this.options.elevation || 55;
     this.s.power = this.options.power;
@@ -1597,10 +1707,194 @@ export class Simulator {
       'Human player placed one artifact in the blue loading zone';
     this.emit();
   }
+  toggleSecondIntake() {
+    if (
+      this.options.players === 2 &&
+      this.s.running &&
+      (!this.options.timed || this.s.phase === 'TELEOP')
+    ) {
+      this.secondIntake = !this.secondIntake;
+      this.emit();
+    }
+  }
+  updateSecondPlayer(pad?: Gamepad) {
+    const bot = this.bots[1];
+    if (!bot?.body.isEnabled()) return;
+    if (this.options.timed && this.s.phase === 'AUTO') return;
+    const active = !this.options.timed || this.s.phase === 'TELEOP';
+    const axes = pad?.axes || [],
+      buttons = pad?.buttons || [];
+    if (active && !this.options.assist && this.adjustmentClock === 0) {
+      const power =
+          Number(!!buttons[15]?.pressed) - Number(!!buttons[14]?.pressed),
+        elevation =
+          Number(!!buttons[12]?.pressed) - Number(!!buttons[13]?.pressed);
+      if (power || elevation) {
+        this.configure({
+          power: this.options.power + power * 0.2,
+          elevation: (this.options.elevation || 55) + elevation * 2,
+        });
+        this.adjustmentClock = 0.12;
+      }
+    }
+    const p = bot.body.translation(),
+      q = bot.body.rotation();
+    bot.yaw = Math.atan2(
+      2 * (q.w * q.y + q.x * q.z),
+      1 - 2 * (q.y * q.y + q.z * q.z),
+    );
+    bot.cooldown = Math.max(0, bot.cooldown - DT);
+    this.secondReverseClock = Math.max(0, this.secondReverseClock - DT);
+    this.secondFlywheel +=
+      ((active && bot.inventory.length ? 1 : 0) - this.secondFlywheel) *
+      (1 - Math.exp(-DT / 0.22));
+    if (!active) this.secondIntake = false;
+    let x = active
+      ? Number(this.keys.has('ArrowRight')) -
+        Number(this.keys.has('ArrowLeft')) +
+        deadzone(axes[0] || 0)
+      : 0;
+    let z = active
+      ? Number(this.keys.has('ArrowDown')) -
+        Number(this.keys.has('ArrowUp')) +
+        deadzone(axes[1] || 0)
+      : 0;
+    let turn = active
+      ? Number(this.keys.has('Comma')) -
+        Number(this.keys.has('Period')) -
+        deadzone(axes[2] || 0)
+      : 0;
+    const magnitude = Math.max(1, Math.hypot(x, z));
+    x /= magnitude;
+    z /= magnitude;
+    if (this.options.view === 'Follow') {
+      const c = Math.cos(this.yaw),
+        ss = Math.sin(this.yaw),
+        xx = x * c + z * ss;
+      z = -x * ss + z * c;
+      x = xx;
+    }
+    const demand = mecanumDemand(x, z, turn, bot.yaw);
+    const precision =
+      this.keys.has('ShiftRight') || (buttons[6]?.value || 0) > 0.2;
+    const impulse = driveImpulse(
+      bot.body.linvel(),
+      {
+        x: demand.x * (precision ? 0.45 : 1.65),
+        z: demand.z * (precision ? 0.45 : 1.65),
+      },
+      bot.body.mass(),
+      DT,
+    );
+    if (p.y < 0.22)
+      bot.body.applyImpulse({ x: impulse.x, y: 0, z: impulse.z }, true);
+    const inertia = (bot.body.mass() * 0.38 * 0.38) / 6;
+    bot.body.applyTorqueImpulse(
+      {
+        x: 0,
+        y: Math.max(
+          -inertia * 8 * DT,
+          Math.min(
+            inertia * 8 * DT,
+            (demand.turn * (precision ? 0.85 : 2.4) - bot.body.angvel().y) *
+              inertia *
+              (1 - Math.exp(-DT / 0.1)),
+          ),
+        ),
+        z: 0,
+      },
+      true,
+    );
+    bot.gate =
+      active &&
+      gateReach(-p.x, p.z, -bot.yaw) <= 0.16 &&
+      (this.keys.has('KeyO') || !!buttons[2]?.pressed);
+    if (active)
+      for (const b of this.balls)
+        this.captureArtifact(
+          b,
+          bot.body,
+          bot.yaw,
+          bot.inventory,
+          this.secondIntake,
+          3,
+        );
+    const reverse = active && (this.keys.has('KeyU') || buttons[1]?.pressed);
+    const shoot =
+      active &&
+      (this.keys.has('Slash') || buttons[7]?.pressed || buttons[0]?.pressed);
+    if (reverse && bot.inventory.length && this.secondReverseClock === 0) {
+      const b = bot.inventory.shift()!;
+      const forward = { x: -Math.sin(bot.yaw), z: -Math.cos(bot.yaw) };
+      b.state = 'free';
+      b.body.setEnabled(true);
+      b.mesh.visible = true;
+      b.body.setTranslation(
+        { x: p.x + forward.x * 0.3, y: 0.09, z: p.z + forward.z * 0.3 },
+        true,
+      );
+      b.body.setLinvel(
+        { x: forward.x * 0.75, y: 0.1, z: forward.z * 0.75 },
+        true,
+      );
+      this.secondReverseClock = 0.4;
+    } else if (
+      shoot &&
+      bot.inventory.length &&
+      bot.cooldown === 0 &&
+      this.secondFlywheel > 0.86 &&
+      inLaunchZone(p.x, p.z)
+    ) {
+      const yaw = this.options.assist
+        ? Math.atan2(-(1.55 - p.x), -(-1.59 - p.z))
+        : bot.yaw;
+      const start = {
+        x: p.x - Math.sin(yaw) * 0.23,
+        y: p.y + 0.27,
+        z: p.z - Math.cos(yaw) * 0.23,
+      };
+      const chassis = bot.body.linvel(),
+        omega = bot.body.angvel().y;
+      const muzzle = {
+        x: chassis.x + omega * (start.z - p.z),
+        z: chassis.z - omega * (start.x - p.x),
+      };
+      const velocity = this.options.assist
+        ? launchVelocity(start, { x: 1.55, y: 1.055, z: -1.59 })
+        : manualLaunch(
+            this.options.power,
+            this.options.elevation || 55,
+            yaw,
+            muzzle,
+          );
+      const b = bot.inventory.shift()!;
+      b.state = 'flight';
+      b.owner = 3;
+      b.previousY = start.y;
+      b.body.setEnabled(true);
+      b.body.setTranslation(start, true);
+      b.body.setLinvel(velocity, true);
+      b.mesh.visible = true;
+      bot.body.applyImpulseAtPoint(
+        {
+          x: -(velocity.x - muzzle.x) * b.body.mass(),
+          y: 0,
+          z: -(velocity.z - muzzle.z) * b.body.mass(),
+        },
+        start,
+        true,
+      );
+      bot.cooldown = 0.35;
+      this.secondFlywheel = Math.max(0, this.secondFlywheel - 0.16);
+    }
+  }
+
   updateBots() {
     if (!this.options.timed) return;
     const active = this.s.phase === 'AUTO' || this.s.phase === 'TELEOP';
     for (const [index, bot] of this.bots.entries()) {
+      if (this.options.players === 2 && index === 1 && this.s.phase !== 'AUTO')
+        continue;
       bot.gate = false;
       bot.cooldown = Math.max(0, bot.cooldown - DT);
       const p = bot.body.translation(),
@@ -1744,9 +2038,10 @@ export class Simulator {
     if (alliance === 0) this.s.score += points;
     else this.s.redScore = (this.s.redScore || 0) + points;
   }
-  advanceMatch() {
+  advanceMatch(dt = DT) {
     if (this.s.phase === 'COMPLETE') return;
-    this.s.time = Math.max(0, this.s.time - DT);
+    const remainder = Math.max(0, dt - this.s.time);
+    this.s.time = Math.max(0, this.s.time - dt);
     if (this.s.time > 0) return;
     if (this.s.phase === 'AUTO') {
       this.s.phase = 'TRANSITION';
@@ -1755,6 +2050,7 @@ export class Simulator {
       this.fireRequested = false;
       this.keys.clear();
       this.s.message = 'Autonomous complete · 8-second scoring transition';
+      if (remainder > 1e-8) this.advanceMatch(remainder);
       return;
     }
     if (this.s.phase === 'TRANSITION') {
@@ -1785,6 +2081,7 @@ export class Simulator {
       this.s.message =
         'Teleop · driver controls enabled. R / L1 starts intake.';
       this.sound(900);
+      if (remainder > 1e-8) this.advanceMatch(remainder);
       return;
     }
     if (this.s.phase === 'TELEOP') {
@@ -1798,7 +2095,7 @@ export class Simulator {
       return;
     }
     if (this.s.phase === 'SETTLING') {
-      this.settleClock += DT;
+      this.settleClock += dt;
       const moving = this.balls.some(
         (b) =>
           b.state === 'transit' ||
