@@ -13,7 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'DECODE | FTC Simulator', description: 'Drive a mecanum robot, launch artifacts, and recycle balls in an unofficial 3D FTC DECODE practice simulator.',
+  title: 'BIOBUZZ | FTC Simulator',
+  description:
+    'Play the 2026–27 BIOBUZZ field: collect pollen, tip hives, and claim flowers in a physics-based FTC driver practice simulator.',
 };
 
 export default function RootLayout({

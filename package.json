@@ -11,7 +11,7 @@
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt",
-    "test": "node tests/physics.mjs && node tests/models.mjs"
+    "test": "node tests/physics.mjs && node tests/models.mjs && node tests/biobuzz.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

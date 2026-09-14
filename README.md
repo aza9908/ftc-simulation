@@ -1,3 +1,50 @@
+# FTC Field Lab — BIOBUZZ and DECODE
+
+The root route opens **2026–27 BIOBUZZ**. The existing **2025–26 DECODE** simulator, CAD library, and Blender import workflow remain at `/decode`.
+
+## BIOBUZZ driver practice
+
+A playable, unofficial approximation based on the **kickoff V1 manual released September 12, 2026**. Select one or two local players, any of the four alliance robots, and a 2-minute TELEOP practice or untimed session. No autonomous driving has been reintroduced. Official matches include 30 seconds AUTO, an 8-second transition, and 120 seconds TELEOP; this app explicitly practices only the manual period.
+
+- A 3.6576 m square, 36-tile field, center frame with two independent ±30° hives, four perimeter flowers, alliance loading zones, and gardens.
+- All 40 pollen and 16 nectar exist at reset. Each robot starts with four pollen; each flower holds four; each garden has four; each raised hive cell holds three nectar; each alliance has five reserve nectar. Pieces are conserved and returned after leaving the field.
+- Rapier runs at 120 Hz with gravity, CCD, friction, restitution, drag, traction-limited mecanum drive, finite turret acceleration, flywheel spin-up, moving-platform launch velocity, and recoil. Free balls physically collide with the field, flowers, robots, and moving hive cells.
+- A hive tips after eight pollen or three pollen plus three nectar, matching the field guide calibration. Its physical cell rotates with finite speed and damping, spills balls under gravity, and earns 20 points only after reaching the opposite stop. Each tip unlocks one reserve nectar; the last minute unlocks all remaining reserves.
+- Intake accepts at most four pieces. Pollen can be removed from the bottom of a flower; trapped nectar cannot. An animated lift places one piece through a flower's top only when close, facing it, moving slowly, and within the final minute (or free practice).
+- Projected scoring includes cell contents, flower ownership and bottom nectar, gardens, and partial loading-zone parking. The clock uses wall time independently of render speed. Controls stop at 0:00; physics settles before final scores. The app does not implement referee penalties or ranking points.
+- Each player has independent aim and launch settings. Controller slots remain stable when another controller disconnects. Multiplayer is local on one device, not online rooms.
+
+| Action | P1 keyboard | P2 keyboard | Standard PS5 mapping |
+| --- | --- | --- | --- |
+| Move across field | WASD | Arrow keys | Left stick |
+| Rotate chassis | Q / E | Comma / period | Right stick |
+| Intake toggle | R | Slash | Square |
+| Launch | Space | Enter | R2 |
+| Place in flower | F | M | Cross |
+| Introduce nectar | N | B | Triangle |
+| Turn turret | Z / X | O / P | R1 + right stick |
+| Center turret | C | H | R3 |
+| Precision drive | Left Shift | Right Shift | L1 |
+| Power / elevation | Sliders and ± buttons | P2 panel | D-pad left/right / up/down |
+| Pause / resume | On-screen button | On-screen button | Options |
+
+Turret buttons nudge 10° when clicked and turn continuously when held. They also work while paused. Hive assist computes a launch from the current muzzle position and ball type; changing power or elevation keeps turret tracking and gives manual ballistics. Toggle assist off/on to restore the automatic calculation. The golden floor ring identifies the active robots.
+
+### Sources and physical limits
+
+- [Official BIOBUZZ Competition Manual V1](https://ftc-resources.firstinspires.org/ftc/archive/2027/game/cm-html/BIOBUZZ%20Competition%20Manual%20-%20V1.htm), especially §§9–11.
+- [Official Event Field Setup Guide V1](https://ftc-resources.firstinspires.org/ftc/archive/2027/field/eventfieldguide), especially hive calibration §12.
+- [FIRST playing-field resources and official CAD](https://ftc-resources.firstinspires.org/ftc/archive/2027/field).
+- [AprilRobotics 36h11 patterns](https://github.com/AprilRobotics/apriltag-imgs/tree/master/tag36h11), IDs 30–45, placed on the underside of each cell.
+
+This is an engineered training approximation, not a calibrated digital twin or FIRST-endorsed product. Field structures are modeled from documented nominal dimensions and figures, not a direct official CAD import. Robot chassis roll/pitch is constrained; wheel rollers are visual, while chassis impulses model the drivetrain. Ball masses (30 g pollen, 50 g nectar), friction, drag, damping and motor constants are estimates. Balls use spherical colliders. Hive load uses the official calibration combinations to trigger a damped kinematic tipping model, not a fully measured pivot/ballast assembly. Intake attachment and lift actuation are simplified mechanisms. No vision pipeline or robot autonomous programming is included. The four BIOBUZZ robots are training designs; the earlier DECODE CAD designs remain in the DECODE season.
+
+### Validation
+
+`npm test` runs both season suites and checks real Rapier ball capture, calibration, hive spillage, actual assisted projectiles from the default spawn, nectar release, intake capacity, physical flower placement, time gates, player independence and stable gamepad slots. Browser checks cover the visible field and controls. Physical gamepad hardware has not been tested.
+
+---
+
 # DECODE manual simulator
 
 Unofficial FIRST Tech Challenge 2025–26 DECODE manual driving practice. Autonomous play, AI robot routines and the AUTO/transition phases have been removed. Choose a two-minute manual session or untimed manual practice; all driver controls are available immediately after Start driving.
